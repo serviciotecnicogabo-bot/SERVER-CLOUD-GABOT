@@ -2,8 +2,9 @@ import { Router } from 'express';
 import crypto from 'node:crypto';
 import https from 'node:https';
 import dns from 'node:dns/promises';
+import dns from 'node:dns/promises';
 import net from 'node:net';
-import { isNonPublicAddress } from '../integration-network.js';
+import { resolvePinnedAddress } from '../integration-network.js';
 import { z } from 'zod';
 import { prisma } from '../db.js';
 import { allowRoles } from '../middleware/auth.js';
@@ -44,18 +45,19 @@ function httpsBaseUrl(value, allowlistEnv) {
 }
 async function fetchJson(url, options = {}) {
   const target = new URL(url);
-  const addresses = await dns.lookup(target.hostname, { all: true, verbatim: true });
-  const literalIp = net.isIP(target.hostname) !== 0;
-  // Private IPs are permitted only when the exact IP literal is explicitly allowlisted
-  // (for example, a MikroTik reachable through the operator's VPN). Hostnames may
-  // never resolve to private, loopback, link-local, or otherwise non-public ranges.
-  if (!addresses.length || addresses.some(({ address }) => isNonPublicAddress(address) && !literalIp)) {
-    const error = new Error('El destino DNS resuelve a una dirección no pública. Para equipos privados, autoriza explícitamente su IP literal y accede mediante VPN.');
+  const hostname = target.hostname.replace(/^\[|\]$/g, '');
+  const literalIp = net.isIP(hostname) !== 0;
+  // Private IP literals can pass only after the exact host has passed the configured allowlist.
+  const pinned = literalIp
+    ? (await dns.lookup(hostname, { verbatim: true })).family
+      ? await dns.lookup(hostname, { verbatim: true }).then(({ address, family }) => ({ address, family }))
+      : null
+    : await resolvePinnedAddress(hostname);
+  if (!pinned) {
+    const error = new Error('No se pudo resolver el destino autorizado.');
     error.statusCode = 400;
     throw error;
   }
-  // Pin the validated DNS result for the TLS request to prevent DNS rebinding.
-  const pinned = addresses[0];
   return new Promise((resolve, reject) => {
     const request = https.request(target, {
       method: 'GET',
