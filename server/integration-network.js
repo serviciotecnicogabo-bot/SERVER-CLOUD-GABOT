@@ -31,6 +31,7 @@ export function isNonPublicAddress(address) {
     const first = Number.parseInt(parts[0] || '0', 16);
     const second = Number.parseInt(parts[1] || '0', 16);
     if (first === 0x2001 && second <= 0x01ff) return true; // 2001::/23
+    if (value.startsWith('2001:db8:')) return true; // documentación: 2001:db8::/32
     if (first === 0x2002) return true; // 6to4: 2002::/16
     if (first === 0x3fff && (second & 0xfff0) === 0) return true; // 3fff::/20
     return false;
