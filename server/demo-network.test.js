@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createDemoNetworkState, authorizeDemoOnu, createDemoPppoe, resetDemoNetwork } from './demo-network.js';
+import { createDemoNetworkState, authorizeDemoOnu, createDemoPppoe, updateDemoPppoeStatus, deleteDemoPppoe, resetDemoNetwork } from './demo-network.js';
 
 test('starts with fictional OLT and pending ONUs only', () => {
   const state = createDemoNetworkState();
@@ -43,4 +43,26 @@ test('reset clears simulated authorizations and PPPoE without device access', ()
   assert.equal(state.pppoe.length, 0);
   assert.ok(state.onus.every(onu => onu.status === 'PENDING'));
   assert.equal(state.events[0].action, 'LAB_RESET_SIMULATED');
+});
+
+test('simulates MikroTik suspend, reactivate and delete without real RouterOS access', () => {
+  const state = createDemoNetworkState();
+  authorizeDemoOnu(state, 'ONU-DEMO-001');
+  const created = createDemoPppoe(state, { onuId: 'ONU-DEMO-001', username: '23huallaga789-150' });
+  assert.equal(created.routerStatus, 'ACTIVE');
+  assert.equal(updateDemoPppoeStatus(state, created.username, 'suspend').routerStatus, 'SUSPENDED');
+  assert.equal(updateDemoPppoeStatus(state, created.username, 'reactivate').routerStatus, 'ACTIVE');
+  assert.equal(deleteDemoPppoe(state, created.username).username, created.username);
+  assert.equal(state.pppoe.length, 0);
+  assert.deepEqual(state.events.slice(0, 3).map(event => event.action), [
+    'PPPOE_DELETED_SIMULATED',
+    'PPPOE_REACTIVATED_SIMULATED',
+    'PPPOE_SUSPENDED_SIMULATED',
+  ]);
+});
+
+test('rejects RouterOS actions for unknown simulated PPPoE users', () => {
+  const state = createDemoNetworkState();
+  assert.throws(() => updateDemoPppoeStatus(state, 'missing-user', 'suspend'), /no encontrado/);
+  assert.throws(() => deleteDemoPppoe(state, 'missing-user'), /no encontrado/);
 });
