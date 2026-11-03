@@ -4,7 +4,7 @@ export function buildProvisioningPreflight(subscription, integrationConfig) {
   const expectedCode = speedCodes[subscription?.plan?.speedDown];
   const actualCode = username.split('-').at(-1);
   const checks = [
-    { key: 'pppoeUsername', label: 'Usuario PPPoE', ok: /^\\d{2}[a-z]+\\d+-\\d{3}$/.test(username), detail: username ? username : 'Falta guardar el usuario PPPoE.' },
+    { key: 'pppoeUsername', label: 'Usuario PPPoE', ok: /^\d{2}[a-z]+\d+-\d{3}$/.test(username), detail: username ? username : 'Falta guardar el usuario PPPoE.' },
     { key: 'plan', label: 'Plan y código', ok: Boolean(expectedCode && actualCode === expectedCode), detail: expectedCode ? (actualCode === expectedCode ? `Código ${expectedCode} coincide con ${subscription.plan.speedDown} Mbps.` : `El plan requiere código ${expectedCode}; el usuario contiene ${actualCode || 'ninguno'}.`) : 'Velocidad de plan no contemplada en el mapeo FTTH.' },
     { key: 'vlanId', label: 'VLAN real', ok: Number.isInteger(subscription?.vlanId) && subscription.vlanId >= 1 && subscription.vlanId <= 4094, detail: subscription?.vlanId ? `VLAN ${subscription.vlanId}` : 'Falta asignar VLAN real de la zona.' },
     { key: 'onuSerial', label: 'Serie ONU / ONT', ok: Boolean(subscription?.onuSerial?.trim()), detail: subscription?.onuSerial || 'Falta registrar la serie de la ONU.' },
