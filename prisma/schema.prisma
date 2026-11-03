@@ -68,6 +68,7 @@ model Tenant {
   payments  Payment[]
   equipment NetworkEquipment[]
   auditLogs AuditLog[]
+  integrationConfig IntegrationConfig?
 }
 
 model User {
@@ -211,4 +212,18 @@ model AuditLog {
   metadata   Json?
   createdAt  DateTime @default(now())
   @@index([tenantId, createdAt])
+}
+
+
+model IntegrationConfig {
+  id                   String   @id @default(cuid())
+  tenantId             String   @unique
+  tenant               Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  mikrotikBaseUrl      String?
+  mikrotikUsername     String?
+  mikrotikPasswordEnc  String?
+  smartoltBaseUrl      String?
+  smartoltApiTokenEnc  String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
 }
