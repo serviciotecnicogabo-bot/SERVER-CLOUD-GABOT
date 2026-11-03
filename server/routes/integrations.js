@@ -156,7 +156,12 @@ router.get('/smartolt/unconfigured-onus', roles, async (req, res, next) => {
       externalId: onu.external_id ?? null,
     }));
     res.json({ items });
-  } catch (error) { next(error); }
+  } catch (error) {
+    res.status(error?.statusCode || 502).json({
+      error: error.name === 'AbortError' ? 'Tiempo de espera agotado al consultar SmartOLT.' : error.message,
+      ...(error?.retryAfter ? { retryAfter: error.retryAfter } : {}),
+    });
+  }
 });
 
 export default router;
