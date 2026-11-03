@@ -12,6 +12,7 @@ export function createDemoNetworkState() {
       { id: 'ONU-DEMO-003', serial: 'HWTC-DEMO-003', pon: '0/1/2', oltId: 'OLT-DEMO-01', status: 'PENDING' },
     ],
     pppoe: [],
+    mikrotik: { id: 'MIKROTIK-DEMO-01', name: 'RouterOS virtual de laboratorio', status: 'SIMULATED' },
     events: [],
   };
 }
@@ -47,9 +48,35 @@ export function createDemoPppoe(state, input) {
     onuId: onu.id,
     router: 'MIKROTIK-DEMO-01',
     status: 'SIMULATED',
+    routerStatus: 'ACTIVE',
   };
   state.pppoe.push(record);
   state.events.unshift({ at: new Date().toISOString(), action: 'PPPOE_CREATED_SIMULATED', target: record.username });
+  return { ...record };
+}
+
+
+export function updateDemoPppoeStatus(state, username, action) {
+  const record = state.pppoe.find(item => item.username === username);
+  if (!record) throw Object.assign(new Error('Usuario PPPoE no encontrado en el laboratorio.'), { statusCode: 404 });
+  if (action === 'suspend') {
+    if (record.routerStatus === 'SUSPENDED') throw Object.assign(new Error('El usuario ya está suspendido.'), { statusCode: 409 });
+    record.routerStatus = 'SUSPENDED';
+  } else if (action === 'reactivate') {
+    if (record.routerStatus === 'ACTIVE') throw Object.assign(new Error('El usuario ya está activo.'), { statusCode: 409 });
+    record.routerStatus = 'ACTIVE';
+  } else {
+    throw Object.assign(new Error('Acción RouterOS simulada no válida.'), { statusCode: 400 });
+  }
+  state.events.unshift({ at: new Date().toISOString(), action: action === 'suspend' ? 'PPPOE_SUSPENDED_SIMULATED' : 'PPPOE_REACTIVATED_SIMULATED', target: username });
+  return { ...record };
+}
+
+export function deleteDemoPppoe(state, username) {
+  const index = state.pppoe.findIndex(item => item.username === username);
+  if (index < 0) throw Object.assign(new Error('Usuario PPPoE no encontrado en el laboratorio.'), { statusCode: 404 });
+  const [record] = state.pppoe.splice(index, 1);
+  state.events.unshift({ at: new Date().toISOString(), action: 'PPPOE_DELETED_SIMULATED', target: username });
   return { ...record };
 }
 
@@ -58,6 +85,7 @@ export function resetDemoNetwork(state) {
   state.olts = fresh.olts;
   state.onus = fresh.onus;
   state.pppoe = [];
+  state.mikrotik = fresh.mikrotik;
   state.events = [{ at: new Date().toISOString(), action: 'LAB_RESET_SIMULATED', target: 'ALL' }];
   return state;
 }
@@ -75,6 +103,19 @@ router.post('/pppoe', (req, res) => {
     const input = z.object({ onuId: z.string().min(1).max(80), username: z.string().trim().toLowerCase().max(80) }).parse(req.body);
     res.status(201).json({ simulated: true, pppoe: createDemoPppoe(state, input) });
   } catch (error) { res.status(error.statusCode || (error.name === 'ZodError' ? 400 : 400)).json({ error: error.name === 'ZodError' ? 'Datos inválidos.' : error.message }); }
+});
+router.post('/mikrotik/:username/:action', (req, res) => {
+  try {
+    const username = z.string().min(1).max(80).parse(req.params.username);
+    const action = z.enum(['suspend', 'reactivate']).parse(req.params.action);
+    res.json({ simulated: true, hardwareChanged: false, pppoe: updateDemoPppoeStatus(state, username, action) });
+  } catch (error) { res.status(error.statusCode || 400).json({ error: error.message }); }
+});
+router.delete('/mikrotik/:username', (req, res) => {
+  try {
+    const username = z.string().min(1).max(80).parse(req.params.username);
+    res.json({ simulated: true, hardwareChanged: false, pppoe: deleteDemoPppoe(state, username) });
+  } catch (error) { res.status(error.statusCode || 400).json({ error: error.message }); }
 });
 router.post('/reset', (_req, res) => res.json({ simulated: true, hardwareChanged: false, state: resetDemoNetwork(state) }));
 
