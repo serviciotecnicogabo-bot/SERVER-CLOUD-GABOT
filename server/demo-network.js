@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { allowRoles } from './middleware/auth.js';
 import { prisma } from './db.js';
 
-// Laboratorio en memoria: nunca realiza llamadas a MikroTik, SmartOLT ni a la base de datos.
+// Laboratorio aislado: solo lee la suscripción seleccionada; la simulación queda en memoria y nunca llama a MikroTik o SmartOLT.
 export function createDemoNetworkState() {
   return {
     olts: [{ id: 'OLT-DEMO-01', name: 'OLT Huawei de laboratorio', status: 'SIMULATED' }],
@@ -69,11 +69,14 @@ export function provisionDemoSubscription(state, subscription, onuId) {
     throw Object.assign(new Error('El código PPPoE no coincide con la velocidad del plan guardado.'), { statusCode: 400 });
   }
   const record = createDemoPppoe(state, { onuId, username: subscription.pppoeUsername });
-  record.subscriptionId = subscription.id;
-  record.customerName = subscription.customer?.name || '';
-  record.planName = subscription.plan?.name || '';
+  const stored = state.pppoe.find(item => item.username === record.username);
+  Object.assign(stored, {
+    subscriptionId: subscription.id,
+    customerName: subscription.customer?.name || '',
+    planName: subscription.plan?.name || '',
+  });
   state.events.unshift({ at: new Date().toISOString(), action: 'SUBSCRIPTION_PROVISIONED_SIMULATED', target: subscription.pppoeUsername });
-  return { ...record };
+  return { ...stored };
 }
 
 export function updateDemoPppoeStatus(state, username, action) {
