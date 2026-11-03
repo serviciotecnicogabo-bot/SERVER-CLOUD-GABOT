@@ -25,10 +25,14 @@ function decrypt(value) {
   decipher.setAuthTag(Buffer.from(tag, 'base64'));
   return Buffer.concat([decipher.update(Buffer.from(data, 'base64')), decipher.final()]).toString('utf8');
 }
-function httpsBaseUrl(value) {
+function httpsBaseUrl(value, allowlistEnv) {
   const parsed = new URL(value);
   if (parsed.protocol !== 'https:' || parsed.username || parsed.password || parsed.search || parsed.hash) {
     throw new Error('La dirección debe ser HTTPS y no debe incluir usuario, contraseña, consulta ni fragmento.');
+  }
+  const allowed = (process.env[allowlistEnv] || '').split(',').map(v => v.trim().toLowerCase()).filter(Boolean);
+  if (!allowed.length || !allowed.includes(parsed.host.toLowerCase())) {
+    throw new Error(`Destino no autorizado. Añade exactamente ${parsed.host} a ${allowlistEnv} en el entorno seguro del servidor.`);
   }
   return parsed.toString().replace(/\/$/, '');
 }
@@ -36,7 +40,7 @@ async function fetchJson(url, options = {}) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10000);
   try {
-    const response = await fetch(url, { ...options, signal: controller.signal, headers: { Accept: 'application/json', ...(options.headers || {}) } });
+    const response = await fetch(url, { ...options, redirect: 'error', signal: controller.signal, headers: { Accept: 'application/json', ...(options.headers || {}) } });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(body.error || body.message || `El equipo respondió HTTP ${response.status}.`);
     return body;
@@ -68,8 +72,8 @@ router.put('/config', roles, async (req, res, next) => {
       smartoltApiToken: z.string().max(1000).optional().or(z.literal('')),
     }).parse(req.body);
     const existing = await getConfig(req.user.tenantId);
-    const mikrotikBaseUrl = input.mikrotikBaseUrl ? httpsBaseUrl(input.mikrotikBaseUrl) : null;
-    const smartoltBaseUrl = input.smartoltBaseUrl ? httpsBaseUrl(input.smartoltBaseUrl) : null;
+    const mikrotikBaseUrl = input.mikrotikBaseUrl ? httpsBaseUrl(input.mikrotikBaseUrl, 'MIKROTIK_ALLOWED_HOSTS') : null;
+    const smartoltBaseUrl = input.smartoltBaseUrl ? httpsBaseUrl(input.smartoltBaseUrl, 'SMARTOLT_ALLOWED_HOSTS') : null;
     const data = {
       mikrotikBaseUrl,
       mikrotikUsername: input.mikrotikUsername || null,
