@@ -2,12 +2,12 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'feature/**']
   pull_request:
-    branches: [main]
+    branches: [main, 'feature/**']
 
 jobs:
-  build:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,5 +20,7 @@ jobs:
         run: npx prisma validate
         env:
           DATABASE_URL: postgresql://ci:ci@localhost:5432/gabot_ci
+      - name: Run automated backend tests
+        run: npm test
       - name: Build frontend
         run: npm run build
