@@ -24,7 +24,7 @@ export function isNonPublicAddress(address) {
     // IPv4-mapped IPv6 addresses are rejected to avoid alternate encodings.
     if (value.startsWith('::ffff:')) return true;
     // Only globally routable unicast space (2000::/3) is accepted.
-    return !/^2[0-9a-f]{3}:/i.test(value) ||
+    return !/^[23][0-9a-f]{3}:/i.test(value) ||
       value.startsWith('2001:db8:') ||
       value.startsWith('2001:10:');
   }
