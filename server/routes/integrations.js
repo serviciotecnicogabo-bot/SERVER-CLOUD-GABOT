@@ -1,5 +1,8 @@
 import { Router } from 'express';
 import crypto from 'node:crypto';
+import https from 'node:https';
+import dns from 'node:dns/promises';
+import net from 'node:net';
 import { z } from 'zod';
 import { prisma } from '../db.js';
 import { allowRoles } from '../middleware/auth.js';
@@ -38,21 +41,63 @@ function httpsBaseUrl(value, allowlistEnv) {
   }
   return parsed.toString().replace(/\/$/, '');
 }
+function isBlockedAddress(address) {
+  const family = net.isIP(address);
+  if (family === 4) {
+    const [a, b] = address.split('.').map(Number);
+    return a === 0 || a === 127 || (a === 169 && b === 254) || a >= 224;
+  }
+  if (family === 6) {
+    const value = address.toLowerCase();
+    return value === '::' || value === '::1' || value.startsWith('fe8') || value.startsWith('fe9') || value.startsWith('fea') || value.startsWith('feb') || value.startsWith('ff') || value.startsWith('::ffff:');
+  }
+  return true;
+}
 async function fetchJson(url, options = {}) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10000);
-  try {
-    const response = await fetch(url, { ...options, redirect: 'error', signal: controller.signal, headers: { Accept: 'application/json', ...(options.headers || {}) } });
-    const body = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const error = new Error(body.error || body.message || `El equipo respondió HTTP ${response.status}.`);
-      error.statusCode = response.status === 429 ? 429 : 502;
-      const retryAfter = response.headers.get('retry-after');
-      if (retryAfter) error.retryAfter = retryAfter;
-      throw error;
-    }
-    return body;
-  } finally { clearTimeout(timeout); }
+  const target = new URL(url);
+  const addresses = await dns.lookup(target.hostname, { all: true, verbatim: true });
+  if (!addresses.length || addresses.some(({ address }) => isBlockedAddress(address))) {
+    const error = new Error('El destino DNS resuelve a una dirección no permitida.');
+    error.statusCode = 400;
+    throw error;
+  }
+  // Pin the validated DNS result for the TLS request to prevent DNS rebinding.
+  const pinned = addresses[0];
+  return new Promise((resolve, reject) => {
+    const request = https.request(target, {
+      method: 'GET',
+      headers: { Accept: 'application/json', ...(options.headers || {}) },
+      lookup: (_hostname, _options, callback) => callback(null, pinned.address, pinned.family),
+    }, response => {
+      const chunks = [];
+      let size = 0;
+      response.on('data', chunk => {
+        size += chunk.length;
+        if (size > 1024 * 1024) request.destroy(new Error('La respuesta del equipo supera el límite permitido.'));
+        else chunks.push(chunk);
+      });
+      response.on('end', () => {
+        let body = {};
+        try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch {}
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          const error = new Error(body.error || body.message || `El equipo respondió HTTP ${response.statusCode}.`);
+          error.statusCode = response.statusCode === 429 ? 429 : 502;
+          const retryAfter = response.headers['retry-after'];
+          if (retryAfter) error.retryAfter = retryAfter;
+          reject(error);
+          return;
+        }
+        resolve(body);
+      });
+    });
+    request.setTimeout(10000, () => {
+      const error = new Error('Tiempo de espera agotado al conectar con el equipo.');
+      error.name = 'AbortError';
+      request.destroy(error);
+    });
+    request.on('error', reject);
+    request.end();
+  });
 }
 async function getConfig(tenantId) {
   return prisma.integrationConfig.findUnique({ where: { tenantId } });
