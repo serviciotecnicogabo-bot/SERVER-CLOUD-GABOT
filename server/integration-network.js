@@ -1,4 +1,5 @@
 import net from 'node:net';
+import dns from 'node:dns/promises';
 
 function inIpv4Range(address, network, mask) {
   const value = address.split('.').reduce((n, part) => (n * 256) + Number(part), 0) >>> 0;
@@ -29,4 +30,14 @@ export function isNonPublicAddress(address) {
       value.startsWith('2001:10:');
   }
   return true;
+}
+
+export async function resolvePinnedAddress(hostname, lookup = dns.lookup) {
+  const addresses = await lookup(hostname, { all: true, verbatim: true });
+  if (!addresses.length || addresses.some(({ address }) => isNonPublicAddress(address))) {
+    const error = new Error('El destino DNS resuelve a una dirección no pública.');
+    error.statusCode = 400;
+    throw error;
+  }
+  return addresses[0];
 }
