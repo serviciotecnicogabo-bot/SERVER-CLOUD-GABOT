@@ -203,6 +203,36 @@ app.patch('/api/subscriptions/:id/status', allowRoles('OWNER', 'ADMIN', 'SUPPORT
   } catch (error) { next(error); }
 });
 
+app.patch('/api/subscriptions/:id/network', allowRoles('OWNER', 'ADMIN', 'SUPPORT', 'TECHNICIAN'), async (req, res, next) => {
+  try {
+    const input = z.object({
+      pppoeUsername: z.string().trim().toLowerCase().regex(/^[0-9]{2}[a-z]+[0-9]+-[0-9]{3}$/).optional().nullable(),
+      zone: z.string().trim().max(100).optional().nullable(),
+      streetName: z.string().trim().max(120).optional().nullable(),
+      streetNumber: z.string().trim().max(30).optional().nullable(),
+      vlanId: z.number().int().min(1).max(4094).optional().nullable(),
+      onuSerial: z.string().trim().max(80).optional().nullable(),
+      oltName: z.string().trim().max(120).optional().nullable(),
+      ponPort: z.string().trim().max(40).optional().nullable(),
+    }).strict().refine(value => Object.keys(value).length > 0, 'Indica al menos un dato de red.').parse(req.body);
+    const existing = await prisma.subscription.findFirst({
+      where: { id: req.params.id, customer: { is: { tenantId: req.user.tenantId } }, plan: { is: { tenantId: req.user.tenantId } } },
+      select: { id: true },
+    });
+    if (!existing) return res.status(404).json({ error: 'Servicio no encontrado.' });
+    const subscription = await prisma.subscription.update({
+      where: { id: existing.id },
+      data: input,
+      include: {
+        customer: { select: { id: true, code: true, name: true, district: true } },
+        plan: { select: { id: true, name: true, speedDown: true, speedUp: true, price: true, currency: true } },
+      },
+    });
+    await prisma.auditLog.create({ data: { tenantId: req.user.tenantId, userId: req.user.id, action: 'UPDATE_NETWORK_IDENTITY', entity: 'Subscription', entityId: subscription.id, metadata: { fields: Object.keys(input) } } });
+    res.json({ subscription });
+  } catch (error) { next(error); }
+});
+
 app.get('/api/plans', async (req, res, next) => {
   try {
     const items = await prisma.plan.findMany({ where: { tenantId: req.user.tenantId }, orderBy: { price: 'asc' } });
