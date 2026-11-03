@@ -1,10 +1,6 @@
 import { Router } from 'express';
 import crypto from 'node:crypto';
-import https from 'node:https';
-import dns from 'node:dns/promises';
-import dns from 'node:dns/promises';
-import net from 'node:net';
-import { resolvePinnedAddress } from '../integration-network.js';
+import { fetchJson } from '../integration-http.js';
 import { z } from 'zod';
 import { prisma } from '../db.js';
 import { allowRoles } from '../middleware/auth.js';
@@ -42,52 +38,6 @@ function httpsBaseUrl(value, allowlistEnv) {
     throw error;
   }
   return parsed.toString().replace(/\/$/, '');
-}
-async function fetchJson(url, options = {}) {
-  const target = new URL(url);
-  const hostname = target.hostname.replace(/^\[|\]$/g, '');
-  const literalIp = net.isIP(hostname) !== 0;
-  // Private IP literals can pass only after the exact host has passed the configured allowlist.
-  const pinned = literalIp
-    ? await dns.lookup(hostname, { verbatim: true }).then(({ address, family }) => ({ address, family }))
-    : await resolvePinnedAddress(hostname);
-  return new Promise((resolve, reject) => {
-    const request = https.request(target, {
-      method: 'GET',
-      headers: { Accept: 'application/json', ...(options.headers || {}) },
-      lookup: (_hostname, lookupOptions, callback) => lookupOptions?.all
-        ? callback(null, [pinned])
-        : callback(null, pinned.address, pinned.family),
-    }, response => {
-      const chunks = [];
-      let size = 0;
-      response.on('data', chunk => {
-        size += chunk.length;
-        if (size > 1024 * 1024) request.destroy(new Error('La respuesta del equipo supera el límite permitido.'));
-        else chunks.push(chunk);
-      });
-      response.on('end', () => {
-        let body = {};
-        try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch {}
-        if (response.statusCode < 200 || response.statusCode >= 300) {
-          const error = new Error(body.error || body.message || `El equipo respondió HTTP ${response.statusCode}.`);
-          error.statusCode = response.statusCode === 429 ? 429 : 502;
-          const retryAfter = response.headers['retry-after'];
-          if (retryAfter) error.retryAfter = retryAfter;
-          reject(error);
-          return;
-        }
-        resolve(body);
-      });
-    });
-    request.setTimeout(10000, () => {
-      const error = new Error('Tiempo de espera agotado al conectar con el equipo.');
-      error.name = 'AbortError';
-      request.destroy(error);
-    });
-    request.on('error', reject);
-    request.end();
-  });
 }
 async function getConfig(tenantId) {
   return prisma.integrationConfig.findUnique({ where: { tenantId } });
