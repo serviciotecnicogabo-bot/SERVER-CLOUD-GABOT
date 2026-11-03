@@ -49,15 +49,8 @@ async function fetchJson(url, options = {}) {
   const literalIp = net.isIP(hostname) !== 0;
   // Private IP literals can pass only after the exact host has passed the configured allowlist.
   const pinned = literalIp
-    ? (await dns.lookup(hostname, { verbatim: true })).family
-      ? await dns.lookup(hostname, { verbatim: true }).then(({ address, family }) => ({ address, family }))
-      : null
+    ? await dns.lookup(hostname, { verbatim: true }).then(({ address, family }) => ({ address, family }))
     : await resolvePinnedAddress(hostname);
-  if (!pinned) {
-    const error = new Error('No se pudo resolver el destino autorizado.');
-    error.statusCode = 400;
-    throw error;
-  }
   return new Promise((resolve, reject) => {
     const request = https.request(target, {
       method: 'GET',
