@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import IntegrationsPage from './IntegrationsPage.jsx';
 import {
   Activity, Bell, Cable, ChartNoAxesCombined, Check, ChevronDown, ChevronLeft,
   ChevronRight, CircleDollarSign, ClipboardList, CreditCard, Download, Gauge,
