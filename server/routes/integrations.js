@@ -32,7 +32,9 @@ function httpsBaseUrl(value, allowlistEnv) {
   }
   const allowed = (process.env[allowlistEnv] || '').split(',').map(v => v.trim().toLowerCase()).filter(Boolean);
   if (!allowed.length || !allowed.includes(parsed.host.toLowerCase())) {
-    const error = new Error(`Destino no autorizado. Añade exactamente ${parsed.host} a ${allowlistEnv} en el entorno seguro del servidor.`);\n    error.statusCode = 400;\n    throw error;
+    const error = new Error(`Destino no autorizado. Añade exactamente ${parsed.host} a ${allowlistEnv} en el entorno seguro del servidor.`);
+    error.statusCode = 400;
+    throw error;
   }
   return parsed.toString().replace(/\/$/, '');
 }
