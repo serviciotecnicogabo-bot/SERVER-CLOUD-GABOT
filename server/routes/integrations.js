@@ -104,7 +104,7 @@ router.post('/mikrotik/test', roles, async (req, res, next) => {
     const baseUrl = httpsBaseUrl(config.mikrotikBaseUrl, 'MIKROTIK_ALLOWED_HOSTS');
     const data = await fetchJson(`${baseUrl}/rest/system/resource`, { headers: { Authorization: `Basic ${auth}` } });
     res.json({ connected: true, device: data['board-name'] || 'MikroTik', version: data.version || 'No informada', uptime: data.uptime || 'No informado' });
-  } catch (error) { res.status(502).json({ connected: false, error: error.name === 'AbortError' ? 'Tiempo de espera agotado al conectar con MikroTik.' : error.message }); }
+  } catch (error) { res.status(error?.statusCode || 502).json({ connected: false, error: error.name === 'AbortError' ? 'Tiempo de espera agotado al conectar con MikroTik.' : error.message }); }
 });
 
 router.post('/smartolt/test', roles, async (req, res, next) => {
@@ -116,7 +116,7 @@ router.post('/smartolt/test', roles, async (req, res, next) => {
     const data = await fetchJson(`${baseUrl}/api/system/get_olts`, { headers: { 'X-Token': token } });
     if (data.status === false) throw new Error(data.error || 'SmartOLT rechazó la autenticación.');
     res.json({ connected: true, olts: Array.isArray(data.response) ? data.response.length : 0 });
-  } catch (error) { res.status(502).json({ connected: false, error: error.name === 'AbortError' ? 'Tiempo de espera agotado al conectar con SmartOLT.' : error.message }); }
+  } catch (error) { res.status(error?.statusCode || 502).json({ connected: false, error: error.name === 'AbortError' ? 'Tiempo de espera agotado al conectar con SmartOLT.' : error.message }); }
 });
 
 router.get('/smartolt/unconfigured-onus', roles, async (req, res, next) => {
