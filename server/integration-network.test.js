@@ -20,6 +20,12 @@ test('rejects non-global and mapped IPv6 ranges', () => {
   }
 });
 
+test('rejects IPv6 special-purpose ranges inside global unicast space', () => {
+  for (const ip of ['2001:20::1', '2001:100::1', '2001:1ff::1', '2002:c000:0201::1', '3fff::1']) {
+    assert.equal(isNonPublicAddress(ip), true, ip);
+  }
+});
+
 test('allows representative global IPv6 unicast addresses', () => {
   for (const ip of ['2606:4700:4700::1111', '2001:4860:4860::8888', '3001::1']) {
     assert.equal(isNonPublicAddress(ip), false, ip);
