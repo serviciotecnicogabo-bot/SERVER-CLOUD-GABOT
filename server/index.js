@@ -8,6 +8,7 @@ import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { prisma } from './db.js';
 import { requireAuth, allowRoles } from './middleware/auth.js';
+import integrationsRouter from './routes/integrations.js';
 
 const app = express();
 const port = Number(process.env.API_PORT || 4000);
@@ -58,6 +59,7 @@ app.post('/api/auth/login', async (req, res, next) => {
 });
 
 app.use('/api', requireAuth);
+app.use('/api/integrations', integrationsRouter);
 
 app.get('/api/me', async (req, res, next) => {
   try {
