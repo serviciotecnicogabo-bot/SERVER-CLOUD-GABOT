@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { prisma } from './db.js';
 import { requireAuth, allowRoles } from './middleware/auth.js';
 import integrationsRouter from './routes/integrations.js';
+import demoNetworkRouter from './demo-network.js';
 
 const app = express();
 const port = Number(process.env.API_PORT || 4000);
@@ -60,6 +61,9 @@ app.post('/api/auth/login', async (req, res, next) => {
 
 app.use('/api', requireAuth);
 app.use('/api/integrations', integrationsRouter);
+if (process.env.NODE_ENV !== 'production' && process.env.GABOT_DEMO_MODE === 'true') {
+  app.use('/api/demo-network', demoNetworkRouter);
+}
 
 app.get('/api/me', async (req, res, next) => {
   try {
