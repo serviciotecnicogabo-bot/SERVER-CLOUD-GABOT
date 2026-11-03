@@ -94,7 +94,7 @@ export default function DemoNetworkPage({ token }) {
 
   return <div className="integration-page">
     <div className="welcome"><div><div className="eyebrow"><span className="live-dot"/> ENTORNO AISLADO · SIN EQUIPOS REALES</div><h1>Laboratorio FTTH</h1><p>Practica autorización de ONUs y creación PPPoE con datos ficticios.</p></div><button className="outline-button" onClick={load} disabled={!!busy}><RefreshCw size={15}/> Actualizar</button></div>
-    <div className="integration-warning"><ShieldCheck size={19}/><div><b>MODO DEMOSTRACIÓN</b><p>Esta pantalla no se conecta a MikroTik, SmartOLT ni guarda cambios en Neon. Los datos existen solo en la memoria del servidor.</p></div></div>
+    <div className="integration-warning"><ShieldCheck size={19}/><div><b>MODO DEMOSTRACIÓN</b><p>Esta pantalla lee servicios guardados en Neon, pero toda autorización y provisión aquí es ficticia y temporal. No se conecta a MikroTik ni SmartOLT ni modifica datos de los servicios.</p></div></div>
     {error && <p className="integration-error">{error}</p>}
     {message && <p className="integration-success"><CheckCircle2 size={16}/>{message}</p>}
     {!state && !error && <section className="panel">Cargando laboratorio...</section>}
