@@ -79,7 +79,7 @@ app.get('/api/dashboard/summary', async (req, res, next) => {
     const [customers, activeCustomers, activeSubscriptions, pendingInvoices, overdueInvoices, equipment, monthlyPayments] = await Promise.all([
       prisma.customer.count({ where: { tenantId } }),
       prisma.customer.count({ where: { tenantId, status: 'ACTIVE' } }),
-      prisma.subscription.count({ where: { status: 'ACTIVE', customer: { tenantId } } }),
+      prisma.subscription.count({ where: { status: 'ACTIVE', customer: { is: { tenantId } } } }),
       prisma.invoice.aggregate({ where: { tenantId, status: { in: ['ISSUED', 'PARTIAL'] } }, _sum: { balance: true }, _count: true }),
       prisma.invoice.aggregate({ where: { tenantId, status: 'OVERDUE' }, _sum: { balance: true }, _count: true }),
       prisma.networkEquipment.count({ where: { tenantId, active: true } }),
