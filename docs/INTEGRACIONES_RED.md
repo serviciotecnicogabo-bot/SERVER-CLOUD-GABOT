@@ -51,11 +51,11 @@ La autorización de una ONU es una operación real de red. Antes de habilitarla 
 
 ## Lista de destinos autorizados
 
-Antes de guardar una URL de equipo, añade su autoridad HTTPS exacta (host y, si corresponde, puerto) a una variable privada del servidor:
-- `MIKROTIK_ALLOWED_HOSTS=router.vpn.empresa:443`
-- `SMARTOLT_ALLOWED_HOSTS=cuenta.smartolt.com:443`
+Antes de guardar una URL de equipo, añade su autoridad HTTPS exacta (host y, solo si es distinto del puerto HTTPS estándar, puerto) a una variable privada del servidor:
+- `MIKROTIK_ALLOWED_HOSTS=router.vpn.empresa`
+- `SMARTOLT_ALLOWED_HOSTS=cuenta.smartolt.com`
 
-Si se usan varios destinos, sepáralos con comas. No incluyas `https://` en estas variables. La aplicación rechaza destinos que no estén en la lista y no sigue redirecciones HTTP. Mantén las listas vacías hasta que el administrador confirme los hosts de laboratorio autorizados. No uses comodines.
+Si se usan varios destinos, sepáralos con comas. No incluyas `https://` ni `:443` en estas variables; añade el puerto solo si no es el 443 estándar. La aplicación rechaza destinos que no estén en la lista y no sigue redirecciones HTTP. Mantén las listas vacías hasta que el administrador confirme los hosts de laboratorio autorizados. No uses comodines.
 
 ## Seguridad y operación
 
