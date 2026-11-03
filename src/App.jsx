@@ -67,6 +67,8 @@ function App(){
   const [loginLoading,setLoginLoading]=useState(false);
   const [loadingClients,setLoadingClients]=useState(false);
   const [clientError,setClientError]=useState('');
+  const [dashboardSummary,setDashboardSummary]=useState(null);
+  const [dashboardError,setDashboardError]=useState('');
   const [refreshKey,setRefreshKey]=useState(0);
   const filtered=useMemo(()=>clients,[clients]);
 
@@ -93,6 +95,17 @@ function App(){
       .finally(()=>{if(!controller.signal.aborted)setLoadingClients(false);});
     return ()=>controller.abort();
   },[token,user,query,refreshKey]);
+
+  useEffect(()=>{
+    if(!token||!user)return;
+    const controller=new AbortController();
+    setDashboardError('');
+    fetch('/api/dashboard/summary',{headers:{Authorization:'Bearer '+token},signal:controller.signal})
+      .then(async r=>{const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.error||'No se pudo cargar el resumen');return data;})
+      .then(data=>setDashboardSummary(data))
+      .catch(error=>{if(error.name!=='AbortError')setDashboardError(error.message);});
+    return ()=>controller.abort();
+  },[token,user,refreshKey]);
 
   async function login(e){
     e.preventDefault();setLoginError('');setLoginLoading(true);
@@ -136,19 +149,20 @@ function App(){
     <div className="sidebar-bottom"><div className="help-card"><div className="help-icon"><ShieldCheck size={18}/></div><b>Centro de ayuda</b><small>Estamos para ayudarte</small><button onClick={()=>setNotice('Centro de ayuda: próximamente')}>Ver soporte <ChevronRight size={14}/></button></div><div className="profile"><div className="avatar">GB</div><div><b>{user?.name||'Administrador'}</b><small>{user?.role||'Usuario'}</small></div><button className="logout-button" onClick={logout}>Salir</button></div></div>
   </aside>;
 
-  const Stat=({label,value,sub,icon:Icon,tone})=><div className="stat-card"><div className="stat-top"><span>{label}</span><div className={'stat-icon '+tone}><Icon size={19}/></div></div><strong>{value}</strong><div className="stat-foot"><span className="trend"><Activity size={13}/>{sub}</span><span>vs. mes anterior</span></div></div>;
+  const Stat=({label,value,sub,icon:Icon,tone})=><div className="stat-card"><div className="stat-top"><span>{label}</span><div className={'stat-icon '+tone}><Icon size={19}/></div></div><strong>{value}</strong><div className="stat-foot"><span className="trend"><Activity size={13}/>{sub}</span><span>Datos de Neon</span></div></div>;
 
   function Dashboard(){return <>
     <div className="welcome"><div><div className="eyebrow"><span className="live-dot"/> SISTEMA OPERATIVO</div><h1>Panel principal</h1><p>Bienvenido a tu centro de control de internet por fibra óptica.</p></div><button className="date-pill"><Activity size={15}/> Vista general <ChevronDown size={14}/></button></div>
     <div className="stats-grid">
-      <Stat label="Clientes registrados" value={clients.length.toLocaleString('es-PE')} sub="+12.8%" icon={Users} tone="blue"/>
-      <Stat label="Servicios activos" value="1,284" sub="+8.2%" icon={Wifi} tone="green"/>
-      <Stat label="Recaudación del mes" value="S/ 48,590" sub="+14.5%" icon={CircleDollarSign} tone="violet"/>
-      <Stat label="Deudas pendientes" value="S/ 6,420" sub="-3.1%" icon={Wallet} tone="orange"/>
+      <Stat label="Clientes registrados" value={Number(dashboardSummary?.customers||0).toLocaleString('es-PE')} sub="Total en la base de datos" icon={Users} tone="blue"/>
+      <Stat label="Servicios activos" value={Number(dashboardSummary?.activeSubscriptions||0).toLocaleString('es-PE')} sub="Suscripciones activas" icon={Wifi} tone="green"/>
+      <Stat label="Pagos del mes" value={'S/ '+Number(dashboardSummary?.monthlyPayments||0).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2})} sub="Pagos registrados este mes" icon={CircleDollarSign} tone="violet"/>
+      <Stat label="Saldo pendiente" value={'S/ '+Number(dashboardSummary?.pendingBalance||0).toLocaleString('es-PE',{minimumFractionDigits:2,maximumFractionDigits:2})} sub={Number(dashboardSummary?.pendingInvoices||0)+' facturas por cobrar'} icon={Wallet} tone="orange"/>
+      {dashboardError&&<p className="client-error">{dashboardError}</p>}
     </div>
     <div className="main-grid">
-      <section className="panel network-panel"><div className="panel-heading"><div><h2>Estado de la red</h2><p>Resumen de infraestructura FTTH</p></div><span className="status-chip"><i/> Operativa</span></div><div className="network-visual"><div className="network-orbit orbit-one"/><div className="network-orbit orbit-two"/><div className="network-core"><Network size={27}/><b>RED FTTH</b><small>Monitoreo general</small></div><div className="node node-a"><Router size={17}/><small>OLT Huawei</small><b>En línea</b></div><div className="node node-b"><Router size={17}/><small>OLT ZTE</small><b>En línea</b></div><div className="node node-c"><Router size={17}/><small>OLT VSOL</small><b>Por conectar</b></div></div><div className="network-legend"><span><i className="green-dot"/> 2 equipos en línea</span><span><i className="gray-dot"/> 1 sin integrar</span></div></section>
-      <section className="panel"><div className="panel-heading"><div><h2>Actividad reciente</h2><p>Últimos movimientos del sistema</p></div><button className="icon-button"><ChevronRight size={17}/></button></div><div className="activity-list"><div className="activity-item"><div className="activity-symbol green"><Check size={16}/></div><div><b>Pago registrado</b><p>Comercial San Martín · S/ 89.90</p><small>Hace 12 minutos</small></div></div><div className="activity-item"><div className="activity-symbol blue"><Users size={16}/></div><div><b>Nuevo cliente</b><p>Registro pendiente de instalación</p><small>Hace 38 minutos</small></div></div><div className="activity-item"><div className="activity-symbol orange"><LifeBuoy size={16}/></div><div><b>Incidencia reportada</b><p>Intermitencia · Zona Breña</p><small>Hace 1 hora</small></div></div><div className="activity-item"><div className="activity-symbol violet"><Zap size={16}/></div><div><b>Servicio activado</b><p>Fibra óptica · 300 Mbps</p><small>Hace 2 horas</small></div></div></div></section>
+      <section className="panel network-panel"><div className="panel-heading"><div><h2>Estado de la red</h2><p>Resumen de infraestructura FTTH</p></div><span className="status-chip"><i/> Operativa</span></div><div className="network-visual"><div className="network-orbit orbit-one"/><div className="network-orbit orbit-two"/><div className="network-core"><Network size={27}/><b>RED FTTH</b><small>Infraestructura registrada</small></div><div className="node node-a"><Router size={17}/><small>Equipos activos</small><b>{Number(dashboardSummary?.registeredEquipment||0)}</b></div></div><div className="network-legend"><span><i className="gray-dot"/> Estado operativo: sin monitoreo conectado</span></div></section>
+      <section className="panel"><div className="panel-heading"><div><h2>Actividad reciente</h2><p>Últimos movimientos del sistema</p></div><button className="icon-button"><ChevronRight size={17}/></button></div><div className="activity-list"><div className="activity-item"><div className="activity-symbol blue"><Activity size={16}/></div><div><b>Registro de actividad</b><p>Los movimientos reales aparecerán aquí cuando se conecte el historial de auditoría.</p><small>Sin eventos consultables por ahora</small></div></div></div></section>
     </div>
     <section className="panel table-panel"><div className="panel-heading"><div><h2>Clientes recientes</h2><p>Vista rápida de tu cartera de clientes</p></div><button className="text-button" onClick={()=>setActive('clients')}>Ver todos <ChevronRight size={15}/></button></div><ClientTable rows={clients.slice(0,4)}/></section>
   </>}
