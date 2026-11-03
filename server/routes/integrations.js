@@ -60,7 +60,9 @@ async function fetchJson(url, options = {}) {
     const request = https.request(target, {
       method: 'GET',
       headers: { Accept: 'application/json', ...(options.headers || {}) },
-      lookup: (_hostname, _options, callback) => callback(null, pinned.address, pinned.family),
+      lookup: (_hostname, lookupOptions, callback) => lookupOptions?.all
+        ? callback(null, [pinned])
+        : callback(null, pinned.address, pinned.family),
     }, response => {
       const chunks = [];
       let size = 0;
