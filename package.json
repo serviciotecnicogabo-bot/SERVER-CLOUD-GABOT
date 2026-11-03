@@ -30,6 +30,7 @@
   },
   "devDependencies": {
     "vite": "^6.0.5",
-    "prisma": "^6.2.1"
+    "prisma": "^6.2.1",
+    "@vitejs/plugin-react": "^4.3.4"
   }
 }
