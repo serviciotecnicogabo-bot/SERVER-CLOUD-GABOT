@@ -9,6 +9,7 @@
     "preview": "vite preview --host 0.0.0.0",
     "dev:api": "node --watch server/index.js",
     "start:api": "node server/index.js",
+    "test": "node --test server/*.test.js",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
