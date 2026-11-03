@@ -25,9 +25,15 @@ export function isNonPublicAddress(address) {
     // IPv4-mapped IPv6 addresses are rejected to avoid alternate encodings.
     if (value.startsWith('::ffff:')) return true;
     // Only globally routable unicast space (2000::/3) is accepted.
-    return !/^[23][0-9a-f]{3}:/i.test(value) ||
-      value.startsWith('2001:db8:') ||
-      value.startsWith('2001:10:');
+    if (!/^[23][0-9a-f]{3}:/i.test(value)) return true;
+    // Reject special-purpose blocks inside global unicast space.
+    const parts = value.split(':');
+    const first = Number.parseInt(parts[0] || '0', 16);
+    const second = Number.parseInt(parts[1] || '0', 16);
+    if (first === 0x2001 && second <= 0x01ff) return true; // 2001::/23
+    if (first === 0x2002) return true; // 6to4: 2002::/16
+    if (first === 0x3fff && (second & 0xfff0) === 0) return true; // 3fff::/20
+    return false;
   }
   return true;
 }
