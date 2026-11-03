@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import https from 'node:https';
 import dns from 'node:dns/promises';
 import net from 'node:net';
+import { isNonPublicAddress } from '../integration-network.js';
 import { z } from 'zod';
 import { prisma } from '../db.js';
 import { allowRoles } from '../middleware/auth.js';
@@ -41,23 +42,15 @@ function httpsBaseUrl(value, allowlistEnv) {
   }
   return parsed.toString().replace(/\/$/, '');
 }
-function isBlockedAddress(address) {
-  const family = net.isIP(address);
-  if (family === 4) {
-    const [a, b] = address.split('.').map(Number);
-    return a === 0 || a === 127 || (a === 169 && b === 254) || a >= 224;
-  }
-  if (family === 6) {
-    const value = address.toLowerCase();
-    return value === '::' || value === '::1' || value.startsWith('fe8') || value.startsWith('fe9') || value.startsWith('fea') || value.startsWith('feb') || value.startsWith('ff') || value.startsWith('::ffff:');
-  }
-  return true;
-}
 async function fetchJson(url, options = {}) {
   const target = new URL(url);
   const addresses = await dns.lookup(target.hostname, { all: true, verbatim: true });
-  if (!addresses.length || addresses.some(({ address }) => isBlockedAddress(address))) {
-    const error = new Error('El destino DNS resuelve a una dirección no permitida.');
+  const literalIp = net.isIP(target.hostname) !== 0;
+  // Private IPs are permitted only when the exact IP literal is explicitly allowlisted
+  // (for example, a MikroTik reachable through the operator's VPN). Hostnames may
+  // never resolve to private, loopback, link-local, or otherwise non-public ranges.
+  if (!addresses.length || addresses.some(({ address }) => isNonPublicAddress(address) && !literalIp)) {
+    const error = new Error('El destino DNS resuelve a una dirección no pública. Para equipos privados, autoriza explícitamente su IP literal y accede mediante VPN.');
     error.statusCode = 400;
     throw error;
   }
