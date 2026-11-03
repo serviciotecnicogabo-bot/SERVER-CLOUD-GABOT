@@ -35,7 +35,7 @@ const nav = [
 
 const pageTitles = {
  dashboard:'Panel principal',clients:'Clientes',plans:'Planes de internet',services:'Servicios activos',
- network:'Red y OLT',onus:'ONU / ONT',incidents:'Incidencias',technicians:'Técnicos',
+ network:'Red y OLT',integrations:'MikroTik / SmartOLT',onus:'ONU / ONT',incidents:'Incidencias',technicians:'Técnicos',
  billing:'Facturación',payments:'Pagos',debts:'Control de deudas',inventory:'Inventario',
  reports:'Reportes',settings:'Configuración'
 };
