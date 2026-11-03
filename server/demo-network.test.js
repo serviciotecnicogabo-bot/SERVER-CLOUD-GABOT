@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createDemoNetworkState, authorizeDemoOnu, createDemoPppoe, updateDemoPppoeStatus, deleteDemoPppoe, resetDemoNetwork } from './demo-network.js';
+import { createDemoNetworkState, authorizeDemoOnu, createDemoPppoe, updateDemoPppoeStatus, deleteDemoPppoe, provisionDemoSubscription, resetDemoNetwork } from './demo-network.js';
 
 test('starts with fictional OLT and pending ONUs only', () => {
   const state = createDemoNetworkState();
@@ -65,4 +65,33 @@ test('rejects RouterOS actions for unknown simulated PPPoE users', () => {
   const state = createDemoNetworkState();
   assert.throws(() => updateDemoPppoeStatus(state, 'missing-user', 'suspend'), /no encontrado/);
   assert.throws(() => deleteDemoPppoe(state, 'missing-user'), /no encontrado/);
+});
+
+
+test('provisions a saved FTTH subscription only in the isolated simulator', () => {
+  const state = createDemoNetworkState();
+  authorizeDemoOnu(state, 'ONU-DEMO-001');
+  const subscription = {
+    id: 'subscription-demo-1',
+    pppoeUsername: '23huallaga789-150',
+    customer: { name: 'gabot' },
+    plan: { name: 'PLAN BASICO', speedDown: 450, price: 95 },
+  };
+  const pppoe = provisionDemoSubscription(state, subscription, 'ONU-DEMO-001');
+  assert.equal(pppoe.username, '23huallaga789-150');
+  assert.equal(pppoe.subscriptionId, 'subscription-demo-1');
+  assert.equal(pppoe.customerName, 'gabot');
+  assert.equal(pppoe.speedMbps, 450);
+  assert.equal(pppoe.pricePen, 95);
+  assert.equal(pppoe.status, 'SIMULATED');
+  assert.equal(state.events[0].action, 'SUBSCRIPTION_PROVISIONED_SIMULATED');
+});
+
+test('rejects saved subscriptions without PPPoE identity or with a mismatched plan code', () => {
+  const state = createDemoNetworkState();
+  authorizeDemoOnu(state, 'ONU-DEMO-001');
+  assert.throws(() => provisionDemoSubscription(state, { id: 's1', plan: { speedDown: 450 } }, 'ONU-DEMO-001'), /no tiene un usuario PPPoE/);
+  assert.throws(() => provisionDemoSubscription(state, {
+    id: 's2', pppoeUsername: '23huallaga789-100', plan: { speedDown: 450 },
+  }, 'ONU-DEMO-001'), /no coincide con la velocidad/);
 });
