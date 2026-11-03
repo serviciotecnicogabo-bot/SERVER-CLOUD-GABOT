@@ -137,6 +137,14 @@ model Subscription {
   startDate   DateTime @default(now())
   endDate     DateTime?
   status      CustomerStatus @default(ACTIVE)
+  pppoeUsername String? @unique
+  zone        String?
+  streetName  String?
+  streetNumber String?
+  vlanId      Int?
+  onuSerial   String?
+  oltName     String?
+  ponPort     String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   @@index([customerId, status])
