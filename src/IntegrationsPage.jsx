@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { CheckCircle2, CircleAlert, RefreshCw, Save, Router, Cable } from 'lucide-react';
+import { CheckCircle2, CircleAlert, RefreshCw, Save, Router, Cable, Sun, Moon, Eye, EyeOff } from 'lucide-react';
 
 export default function IntegrationsPage({ token, user }) {
   const [form, setForm] = useState({ mikrotikBaseUrl:'', mikrotikUsername:'', mikrotikPassword:'', smartoltBaseUrl:'', smartoltApiToken:'' });
@@ -14,6 +14,10 @@ export default function IntegrationsPage({ token, user }) {
   const [preflight, setPreflight] = useState(null);
   const [onuIp, setOnuIp] = useState(null);
   const [onuIpDraft, setOnuIpDraft] = useState('');
+  const [theme, setTheme] = useState(() => { try { return localStorage.getItem('gabot-theme') || 'dark'; } catch { return 'dark'; } });
+  const [showMikrotikPassword, setShowMikrotikPassword] = useState(false);
+  const [showSmartoltToken, setShowSmartoltToken] = useState(false);
+  useEffect(() => { try { localStorage.setItem('gabot-theme', theme); } catch {} }, [theme]);
   async function api(path, options={}) {
     const r=await fetch('/api/integrations'+path,{...options,headers:{Authorization:'Bearer '+token,...(options.body?{'Content-Type':'application/json'}:{}),...(options.headers||{})}});
     const d=await r.json().catch(()=>({}));
@@ -75,8 +79,9 @@ export default function IntegrationsPage({ token, user }) {
     catch(e){setError(e.message);}finally{setBusy('');}
   }
   const canEdit=['OWNER','ADMIN'].includes(user?.role);
-  return <div className="integration-page">
-    <div className="welcome"><div><div className="eyebrow"><span className="live-dot"/> INTEGRACIONES DE RED</div><h1>MikroTik y SmartOLT Huawei</h1><p>Conecta tus equipos para preparar el alta automatizada de abonados.</p></div><button type="button" className="outline-button" onClick={load} disabled={!!busy}><RefreshCw size={15}/> Actualizar</button></div>
+  return <div className={`integration-page gabot-theme-${theme}`}>
+    <style>{".integration-page{min-height:100vh;padding:24px;border-radius:18px;transition:background .2s,color .2s}.gabot-theme-dark{--g-panel:#111c2e;--g-text:#e8eef8;--g-muted:#9aabc2;--g-border:#26364d;--g-input:#0b1627;--g-accent:#38bdf8;background:#0b1220;color:var(--g-text)}.gabot-theme-light{--g-panel:#fff;--g-text:#17263b;--g-muted:#61738b;--g-border:#d8e2ef;--g-input:#f8fbff;--g-accent:#087eae;background:#f3f7fc;color:var(--g-text)}.gabot-theme-dark .panel,.gabot-theme-light .panel{background:var(--g-panel);color:var(--g-text);border:1px solid var(--g-border);box-shadow:0 12px 32px #06101d18}.gabot-theme-dark p,.gabot-theme-light p,.gabot-theme-dark label,.gabot-theme-light label{color:var(--g-muted)}.gabot-theme-dark input,.gabot-theme-light input,.gabot-theme-dark select,.gabot-theme-light select{background:var(--g-input);color:var(--g-text);border:1px solid var(--g-border)}.password-field{display:flex;align-items:center;gap:6px}.password-field input{flex:1;min-width:0}.password-eye,.theme-toggle{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--g-border);background:var(--g-panel);color:var(--g-text);border-radius:10px;padding:9px 12px;cursor:pointer;transition:transform .18s,border-color .18s}.password-eye:hover,.theme-toggle:hover{transform:translateY(-1px);border-color:var(--g-accent)}.theme-toggle{margin-left:12px}@media(prefers-reduced-motion:reduce){.integration-page *{transition:none!important;animation:none!important}}"}</style>
+    <div className="welcome"><div><div className="eyebrow"><span className="live-dot"/> INTEGRACIONES DE RED</div><h1>MikroTik y SmartOLT Huawei</h1><p>Conecta tus equipos para preparar el alta automatizada de abonados.</p></div><div><button type="button" className="theme-toggle" onClick={() => setTheme(v => v === "dark" ? "light" : "dark")}>{theme === "dark" ? <Sun size={16}/> : <Moon size={16}/>} {theme === "dark" ? "Modo claro" : "Modo oscuro"}</button><button type="button" className="outline-button" onClick={load} disabled={!!busy}><RefreshCw size={15}/> Actualizar</button></div></div>
     {!status?.encryptionReady&&<div className="integration-warning"><CircleAlert size={18}/><div><b>Falta preparar el cifrado</b><p>El servidor necesita INTEGRATION_ENCRYPTION_KEY (mínimo 32 caracteres) antes de guardar claves.</p></div></div>}
     {error&&<div className="integration-error">{error}</div>}{message&&<div className="integration-success"><CheckCircle2 size={17}/>{message}</div>}
     <section className="panel integration-card">
@@ -116,7 +121,7 @@ export default function IntegrationsPage({ token, user }) {
         <div className="integration-fields">
           <label>Dirección HTTPS<input type="url" placeholder="https://router.empresa.net" value={form.mikrotikBaseUrl} onChange={e=>setForm({...form,mikrotikBaseUrl:e.target.value})}/></label>
           <label>Usuario API<input value={form.mikrotikUsername} onChange={e=>setForm({...form,mikrotikUsername:e.target.value})}/></label>
-          <label>Clave API<input type="password" autoComplete="new-password" placeholder={status?.mikrotik.configured?'Guardada; vacío conserva la actual':'Introduce la clave'} value={form.mikrotikPassword} onChange={e=>setForm({...form,mikrotikPassword:e.target.value})}/></label>
+          <label>Clave API<div className="password-field"><input type={showMikrotikPassword ? "text" : "password"} autoComplete="new-password" placeholder={status?.mikrotik.configured?'Guardada; vacío conserva la actual':'Introduce la clave'} value={form.mikrotikPassword} onChange={e=>setForm({...form,mikrotikPassword:e.target.value})}/><button type="button" className="password-eye" onClick={()=>setShowMikrotikPassword(v=>!v)} aria-label={showMikrotikPassword ? "Ocultar contraseña" : "Mostrar contraseña"}>{showMikrotikPassword ? <EyeOff size={17}/> : <Eye size={17}/>}</button></div></label>
         </div>
         <p className="integration-hint">Requiere RouterOS v7, REST por HTTPS y certificado TLS válido. Recomendado: VPN o red privada; no expongas el API directamente a Internet.</p>
         <button type="button" className="outline-button" onClick={()=>test('mikrotik')} disabled={!status?.mikrotik.configured||!!busy}>Probar MikroTik</button>
@@ -126,7 +131,7 @@ export default function IntegrationsPage({ token, user }) {
         <div className="integration-heading"><Cable size={22}/><div><h2>SmartOLT · Huawei</h2><p>API para OLT y detección de ONUs.</p></div><span>{status?.smartolt.configured?'Configurado':'Pendiente'}</span></div>
         <div className="integration-fields">
           <label>Dominio SmartOLT<input type="url" placeholder="https://mioperador.smartolt.com" value={form.smartoltBaseUrl} onChange={e=>setForm({...form,smartoltBaseUrl:e.target.value})}/></label>
-          <label>API Token<input type="password" autoComplete="new-password" placeholder={status?.smartolt.configured?'Guardado; vacío conserva el actual':'Introduce el X-Token'} value={form.smartoltApiToken} onChange={e=>setForm({...form,smartoltApiToken:e.target.value})}/></label>
+          <label>API Token<div className="password-field"><input type={showSmartoltToken ? "text" : "password"} autoComplete="new-password" placeholder={status?.smartolt.configured?'Guardado; vacío conserva el actual':'Introduce el X-Token'} value={form.smartoltApiToken} onChange={e=>setForm({...form,smartoltApiToken:e.target.value})}/><button type="button" className="password-eye" onClick={()=>setShowSmartoltToken(v=>!v)} aria-label={showSmartoltToken ? "Ocultar token" : "Mostrar token"}>{showSmartoltToken ? <EyeOff size={17}/> : <Eye size={17}/>}</button></div></label>
         </div>
         <p className="integration-hint">El token se cifra en Neon. SmartOLT debe permitir la IP pública de salida de GABOT.</p>
         <div className="integration-actions"><button type="button" className="outline-button" onClick={()=>test('smartolt')} disabled={!status?.smartolt.configured||!!busy}>Probar SmartOLT</button><button type="button" className="outline-button" onClick={scan} disabled={!status?.smartolt.configured||!!busy}>{busy==='onus'?'Consultando...':'Buscar ONUs pendientes'}</button></div>
