@@ -147,10 +147,60 @@ app.patch('/api/customers/:id/status', allowRoles('OWNER', 'ADMIN', 'SUPPORT'), 
   } catch (error) { next(error); }
 });
 
+app.get('/api/subscriptions', async (req, res, next) => {
+  try {
+    const items = await prisma.subscription.findMany({
+      where: { customer: { is: { tenantId: req.user.tenantId } }, plan: { is: { tenantId: req.user.tenantId } } },
+      include: { customer: { select: { id: true, code: true, name: true, district: true } }, plan: { select: { id: true, name: true, speedDown: true, speedUp: true, price: true, currency: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+    res.json({ items });
+  } catch (error) { next(error); }
+});
+
+app.post('/api/subscriptions', allowRoles('OWNER', 'ADMIN', 'SUPPORT'), async (req, res, next) => {
+  try {
+    const input = z.object({
+      customerId: z.string().min(1),
+      planId: z.string().min(1),
+      status: z.enum(['ACTIVE', 'PENDING', 'SUSPENDED', 'INACTIVE']).default('PENDING'),
+    }).parse(req.body);
+    const [customer, plan] = await Promise.all([
+      prisma.customer.findFirst({ where: { id: input.customerId, tenantId: req.user.tenantId } }),
+      prisma.plan.findFirst({ where: { id: input.planId, tenantId: req.user.tenantId, active: true } }),
+    ]);
+    if (!customer) return res.status(404).json({ error: 'Cliente no encontrado.' });
+    if (!plan) return res.status(404).json({ error: 'Plan no encontrado o inactivo.' });
+    const subscription = await prisma.subscription.create({
+      data: { customerId: customer.id, planId: plan.id, status: input.status },
+      include: { customer: { select: { id: true, code: true, name: true, district: true } }, plan: { select: { id: true, name: true, speedDown: true, speedUp: true, price: true, currency: true } } },
+    });
+    await prisma.auditLog.create({ data: { tenantId: req.user.tenantId, userId: req.user.id, action: 'CREATE', entity: 'Subscription', entityId: subscription.id } });
+    res.status(201).json({ subscription });
+  } catch (error) { next(error); }
+});
+
+app.patch('/api/subscriptions/:id/status', allowRoles('OWNER', 'ADMIN', 'SUPPORT'), async (req, res, next) => {
+  try {
+    const { status } = z.object({ status: z.enum(['ACTIVE', 'PENDING', 'SUSPENDED', 'INACTIVE']) }).parse(req.body);
+    const existing = await prisma.subscription.findFirst({
+      where: { id: req.params.id, customer: { is: { tenantId: req.user.tenantId } }, plan: { is: { tenantId: req.user.tenantId } } },
+      select: { id: true },
+    });
+    if (!existing) return res.status(404).json({ error: 'Servicio no encontrado.' });
+    const subscription = await prisma.subscription.update({
+      where: { id: existing.id }, data: { status, endDate: status === 'INACTIVE' ? new Date() : null },
+      include: { customer: { select: { id: true, code: true, name: true, district: true } }, plan: { select: { id: true, name: true, speedDown: true, speedUp: true, price: true, currency: true } } },
+    });
+    await prisma.auditLog.create({ data: { tenantId: req.user.tenantId, userId: req.user.id, action: 'UPDATE_STATUS', entity: 'Subscription', entityId: subscription.id, metadata: { status } } });
+    res.json({ subscription });
+  } catch (error) { next(error); }
+});
+
 app.get('/api/plans', async (req, res, next) => {
   try {
-    const plans = await prisma.plan.findMany({ where: { tenantId: req.user.tenantId, active: true }, orderBy: { price: 'asc' } });
-    res.json({ items: plans });
+    const items = await prisma.plan.findMany({ where: { tenantId: req.user.tenantId }, orderBy: { price: 'asc' } });
+    res.json({ items });
   } catch (error) { next(error); }
 });
 
@@ -164,7 +214,19 @@ app.post('/api/plans', allowRoles('OWNER', 'ADMIN'), async (req, res, next) => {
       currency: z.enum(['PEN', 'USD']).default('PEN'),
     }).parse(req.body);
     const plan = await prisma.plan.create({ data: { ...input, tenantId: req.user.tenantId } });
+    await prisma.auditLog.create({ data: { tenantId: req.user.tenantId, userId: req.user.id, action: 'CREATE', entity: 'Plan', entityId: plan.id } });
     res.status(201).json({ plan });
+  } catch (error) { next(error); }
+});
+
+app.patch('/api/plans/:id/status', allowRoles('OWNER', 'ADMIN'), async (req, res, next) => {
+  try {
+    const { active } = z.object({ active: z.boolean() }).parse(req.body);
+    const result = await prisma.plan.updateMany({ where: { id: req.params.id, tenantId: req.user.tenantId }, data: { active } });
+    if (!result.count) return res.status(404).json({ error: 'Plan no encontrado.' });
+    const plan = await prisma.plan.findFirst({ where: { id: req.params.id, tenantId: req.user.tenantId } });
+    await prisma.auditLog.create({ data: { tenantId: req.user.tenantId, userId: req.user.id, action: 'UPDATE_STATUS', entity: 'Plan', entityId: plan.id, metadata: { active } } });
+    res.json({ plan });
   } catch (error) { next(error); }
 });
 
