@@ -252,7 +252,7 @@ app.get('/api/equipment', allowRoles('OWNER', 'ADMIN', 'TECHNICIAN', 'SUPPORT'),
 });
 
 app.use((error, _req, res, _next) => {
-  if (error?.name === 'ZodError') return res.status(400).json({ error: 'Datos inválidos.', details: error.issues });
+  if (error?.name === 'ZodError') return res.status(400).json({ error: 'Datos inválidos.', details: error.issues });\n  if (Number.isInteger(error?.statusCode) && error.statusCode >= 400 && error.statusCode < 500) return res.status(error.statusCode).json({ error: error.message });
   if (error?.code === 'P2002') return res.status(409).json({ error: 'Ya existe un registro con esos datos.' });
   console.error(error);
   res.status(500).json({ error: 'Error interno del servidor.' });
