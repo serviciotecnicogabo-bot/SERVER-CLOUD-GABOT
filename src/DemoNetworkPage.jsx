@@ -43,6 +43,20 @@ export default function DemoNetworkPage({ token }) {
     finally { setBusy(''); }
   }
 
+
+  async function routerAction(username, action) {
+    const labels = { suspend: 'suspender', reactivate: 'reactivar', delete: 'eliminar' };
+    if (action === 'delete' && !window.confirm('¿Eliminar este usuario PPPoE ficticio del MikroTik virtual?')) return;
+    setBusy('router'); setError(''); setMessage('');
+    try {
+      const options = action === 'delete' ? { method: 'DELETE' } : { method: 'POST' };
+      await request('/mikrotik/' + encodeURIComponent(username) + (action === 'delete' ? '' : '/' + action), options);
+      setMessage('Acción RouterOS simulada: usuario ' + labels[action] + '. No se modificó ningún router real.');
+      await load();
+    } catch (e) { setError(e.message); }
+    finally { setBusy(''); }
+  }
+
   async function reset() {
     if (!window.confirm('¿Reiniciar los datos ficticios del laboratorio?')) return;
     setBusy('reset'); setError(''); setMessage('');
@@ -72,6 +86,13 @@ export default function DemoNetworkPage({ token }) {
         <form onSubmit={createPppoe}><label style={{display:'block',fontSize:10,color:'#b8c4d6',marginBottom:12}}>Usuario PPPoE<input value={username} onChange={e=>setUsername(e.target.value.toLowerCase())} required pattern="[0-9]{2}[a-z]+[0-9]+-[0-9]{3}" style={{display:'block',width:'100%',maxWidth:420,height:39,marginTop:7,border:'1px solid #34435c',background:'#0c1526',color:'#fff',borderRadius:8,padding:'0 11px'}}/></label><p className="integration-hint">100 = 300 Mbps / S/75 · 150 = 450 Mbps / S/95 · 200 = 650 Mbps / S/125. El código de plan no es una VLAN.</p><button className="primary-button" disabled={!selectedOnu||!!busy||state.onus.find(x=>x.id===selectedOnu)?.status!=='AUTHORIZED'}>{busy==='pppoe'?'Creando...':'Crear PPPoE (demo)'}</button></form>
       </section>
       <section className="panel"><div className="panel-heading"><div><h2>Sesiones PPPoE simuladas</h2><p>No existen en ningún router real.</p></div></div><div className="table-wrap"><table><thead><tr><th>USUARIO</th><th>PLAN</th><th>VELOCIDAD</th><th>PRECIO</th><th>ESTADO</th></tr></thead><tbody>{state.pppoe.map(p=><tr key={p.id}><td>{p.username}</td><td>{p.planCode}</td><td>{p.speedMbps} Mbps</td><td>S/ {p.pricePen}</td><td>Simulado</td></tr>)}</tbody></table>{!state.pppoe.length&&<div className="empty">Todavía no hay usuarios PPPoE simulados.</div>}</div></section>
+
+      <section className="panel"><div className="panel-heading"><div><h2>Simulador MikroTik RouterOS</h2><p>{state.mikrotik?.name || 'MIKROTIK-DEMO-01'} · entorno virtual sin conexión a RouterOS real.</p></div><span className="status-chip"><i/> Solo demo</span></div>
+        <div className="table-wrap"><table><thead><tr><th>SECRET PPPoE</th><th>PERFIL</th><th>ESTADO ROUTEROS</th><th>ACCIONES SIMULADAS</th></tr></thead><tbody>{state.pppoe.map(p=><tr key={p.id}><td>{p.username}</td><td>{p.speedMbps} Mbps · Plan {p.planCode}</td><td>{p.routerStatus === 'SUSPENDED' ? 'Suspendido' : 'Activo'}</td><td><div className="integration-actions">
+          {p.routerStatus === 'SUSPENDED' ? <button className="outline-button" disabled={!!busy} onClick={()=>routerAction(p.username,'reactivate')}>Reactivar</button> : <button className="outline-button" disabled={!!busy} onClick={()=>routerAction(p.username,'suspend')}>Suspender</button>}
+          <button className="outline-button" disabled={!!busy} onClick={()=>routerAction(p.username,'delete')}>Eliminar</button>
+        </div></td></tr>)}</tbody></table>{!state.pppoe.length&&<div className="empty">Crea un PPPoE en el laboratorio para probar el MikroTik virtual.</div>}</div>
+      </section>
       <section className="panel"><div className="panel-heading"><div><h2>Bitácora del laboratorio</h2><p>Actividad temporal del servidor.</p></div><button className="outline-button" onClick={reset} disabled={!!busy}>Reiniciar demo</button></div>{state.events.length?state.events.map((event,i)=><div className="activity-item" key={i}><div><b>{event.action}</b><p>{event.target}</p><small>{new Date(event.at).toLocaleString('es-PE')}</small></div></div>):<div className="empty">Sin eventos todavía.</div>}</section>
     </>}
   </div>;
