@@ -101,7 +101,8 @@ router.post('/mikrotik/test', roles, async (req, res, next) => {
     if (!config?.mikrotikBaseUrl || !config.mikrotikUsername || !config.mikrotikPasswordEnc) return res.status(400).json({ error: 'Configura primero la dirección HTTPS, usuario y contraseña de MikroTik.' });
     const password = decrypt(config.mikrotikPasswordEnc);
     const auth = Buffer.from(`${config.mikrotikUsername}:${password}`).toString('base64');
-    const data = await fetchJson(`${config.mikrotikBaseUrl}/rest/system/resource`, { headers: { Authorization: `Basic ${auth}` } });
+    const baseUrl = httpsBaseUrl(config.mikrotikBaseUrl, 'MIKROTIK_ALLOWED_HOSTS');
+    const data = await fetchJson(`${baseUrl}/rest/system/resource`, { headers: { Authorization: `Basic ${auth}` } });
     res.json({ connected: true, device: data['board-name'] || 'MikroTik', version: data.version || 'No informada', uptime: data.uptime || 'No informado' });
   } catch (error) { res.status(502).json({ connected: false, error: error.name === 'AbortError' ? 'Tiempo de espera agotado al conectar con MikroTik.' : error.message }); }
 });
@@ -111,7 +112,8 @@ router.post('/smartolt/test', roles, async (req, res, next) => {
     const config = await getConfig(req.user.tenantId);
     if (!config?.smartoltBaseUrl || !config.smartoltApiTokenEnc) return res.status(400).json({ error: 'Configura primero el dominio SmartOLT y su API Token.' });
     const token = decrypt(config.smartoltApiTokenEnc);
-    const data = await fetchJson(`${config.smartoltBaseUrl}/api/system/get_olts`, { headers: { 'X-Token': token } });
+    const baseUrl = httpsBaseUrl(config.smartoltBaseUrl, 'SMARTOLT_ALLOWED_HOSTS');
+    const data = await fetchJson(`${baseUrl}/api/system/get_olts`, { headers: { 'X-Token': token } });
     if (data.status === false) throw new Error(data.error || 'SmartOLT rechazó la autenticación.');
     res.json({ connected: true, olts: Array.isArray(data.response) ? data.response.length : 0 });
   } catch (error) { res.status(502).json({ connected: false, error: error.name === 'AbortError' ? 'Tiempo de espera agotado al conectar con SmartOLT.' : error.message }); }
@@ -121,7 +123,8 @@ router.get('/smartolt/unconfigured-onus', roles, async (req, res, next) => {
   try {
     const config = await getConfig(req.user.tenantId);
     if (!config?.smartoltBaseUrl || !config.smartoltApiTokenEnc) return res.status(400).json({ error: 'Configura primero SmartOLT.' });
-    const data = await fetchJson(`${config.smartoltBaseUrl}/api/onu/unconfigured_onus`, { headers: { 'X-Token': decrypt(config.smartoltApiTokenEnc) } });
+    const baseUrl = httpsBaseUrl(config.smartoltBaseUrl, 'SMARTOLT_ALLOWED_HOSTS');
+    const data = await fetchJson(`${baseUrl}/api/onu/unconfigured_onus`, { headers: { 'X-Token': decrypt(config.smartoltApiTokenEnc) } });
     if (data.status === false) throw new Error(data.error || 'SmartOLT no pudo consultar las ONUs.');
     res.json({ items: data.response || [] });
   } catch (error) { next(error); }
