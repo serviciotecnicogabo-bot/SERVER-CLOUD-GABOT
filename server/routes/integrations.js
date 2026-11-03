@@ -42,6 +42,12 @@ function httpsBaseUrl(value, allowlistEnv) {
 async function getConfig(tenantId) {
   return prisma.integrationConfig.findUnique({ where: { tenantId } });
 }
+function integrationErrorMessage(error, device) {
+  if (error?.name === 'AbortError') return `Tiempo de espera agotado al conectar con ${device}.`;
+  if (error?.statusCode === 400) return error.message;
+  if (error?.statusCode === 429) return `${device} aplicó un límite temporal de solicitudes. Inténtalo más tarde.`;
+  return `No se pudo completar la comunicación segura con ${device}. Revisa la configuración y los registros del servidor.`;
+}
 function publicConfig(config) {
   return {
     mikrotik: { configured: Boolean(config?.mikrotikBaseUrl && config?.mikrotikUsername && config?.mikrotikPasswordEnc), baseUrl: config?.mikrotikBaseUrl || '', username: config?.mikrotikUsername || '' },
@@ -50,7 +56,7 @@ function publicConfig(config) {
   };
 }
 
-router.get('/status', async (req, res, next) => {
+router.get('/status', roles, async (req, res, next) => {
   try { res.json(publicConfig(await getConfig(req.user.tenantId))); }
   catch (error) { next(error); }
 });
@@ -100,7 +106,7 @@ router.post('/mikrotik/test', roles, async (req, res, next) => {
       throw new Error('MikroTik devolvió una respuesta de recursos con formato inesperado.');
     }
     res.json({ connected: true, device: resource['board-name'] || resource.platform || 'MikroTik', version: resource.version || 'No informada', uptime: resource.uptime || 'No informado' });
-  } catch (error) { res.status(error?.statusCode || 502).json({ connected: false, error: error.name === 'AbortError' ? 'Tiempo de espera agotado al conectar con MikroTik.' : error.message, ...(error?.retryAfter ? { retryAfter: error.retryAfter } : {}) }); }
+  } catch (error) { res.status(error?.statusCode || 502).json({ connected: false, error: integrationErrorMessage(error, 'MikroTik'), ...(error?.retryAfter ? { retryAfter: error.retryAfter } : {}) }); }
 });
 
 router.post('/smartolt/test', roles, async (req, res, next) => {
@@ -111,10 +117,10 @@ router.post('/smartolt/test', roles, async (req, res, next) => {
     const baseUrl = httpsBaseUrl(config.smartoltBaseUrl, 'SMARTOLT_ALLOWED_HOSTS');
     const data = await fetchJson(`${baseUrl}/api/system/get_olts`, { headers: { 'X-Token': token } });
     if (data?.status !== true || !Array.isArray(data.response)) {
-      throw new Error(data?.error || 'SmartOLT devolvió una respuesta inesperada al consultar las OLTs.');
+      throw new Error('SmartOLT devolvió una respuesta inesperada al consultar las OLTs.');
     }
     res.json({ connected: true, olts: data.response.length });
-  } catch (error) { res.status(error?.statusCode || 502).json({ connected: false, error: error.name === 'AbortError' ? 'Tiempo de espera agotado al conectar con SmartOLT.' : error.message, ...(error?.retryAfter ? { retryAfter: error.retryAfter } : {}) }); }
+  } catch (error) { res.status(error?.statusCode || 502).json({ connected: false, error: integrationErrorMessage(error, 'SmartOLT'), ...(error?.retryAfter ? { retryAfter: error.retryAfter } : {}) }); }
 });
 
 router.get('/smartolt/unconfigured-onus', roles, async (req, res, next) => {
@@ -124,7 +130,7 @@ router.get('/smartolt/unconfigured-onus', roles, async (req, res, next) => {
     const baseUrl = httpsBaseUrl(config.smartoltBaseUrl, 'SMARTOLT_ALLOWED_HOSTS');
     const data = await fetchJson(`${baseUrl}/api/onu/unconfigured_onus`, { headers: { 'X-Token': decrypt(config.smartoltApiTokenEnc) } });
     if (data?.status !== true || !Array.isArray(data.response)) {
-      throw new Error(data?.error || 'SmartOLT devolvió una respuesta inesperada al consultar las ONUs pendientes.');
+      throw new Error('SmartOLT devolvió una respuesta inesperada al consultar las ONUs pendientes.');
     }
     // Expose only documented inventory fields; this endpoint is read-only.
     const items = data.response.map(onu => ({
@@ -143,7 +149,7 @@ router.get('/smartolt/unconfigured-onus', roles, async (req, res, next) => {
     res.json({ items });
   } catch (error) {
     res.status(error?.statusCode || 502).json({
-      error: error.name === 'AbortError' ? 'Tiempo de espera agotado al consultar SmartOLT.' : error.message,
+      error: integrationErrorMessage(error, 'SmartOLT'),
       ...(error?.retryAfter ? { retryAfter: error.retryAfter } : {}),
     });
   }
