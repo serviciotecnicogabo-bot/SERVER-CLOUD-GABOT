@@ -44,7 +44,13 @@ async function fetchJson(url, options = {}) {
   try {
     const response = await fetch(url, { ...options, redirect: 'error', signal: controller.signal, headers: { Accept: 'application/json', ...(options.headers || {}) } });
     const body = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(body.error || body.message || `El equipo respondió HTTP ${response.status}.`);
+    if (!response.ok) {
+      const error = new Error(body.error || body.message || `El equipo respondió HTTP ${response.status}.`);
+      error.statusCode = response.status === 429 ? 429 : 502;
+      const retryAfter = response.headers.get('retry-after');
+      if (retryAfter) error.retryAfter = retryAfter;
+      throw error;
+    }
     return body;
   } finally { clearTimeout(timeout); }
 }
@@ -103,8 +109,13 @@ router.post('/mikrotik/test', roles, async (req, res, next) => {
     const auth = Buffer.from(`${config.mikrotikUsername}:${password}`).toString('base64');
     const baseUrl = httpsBaseUrl(config.mikrotikBaseUrl, 'MIKROTIK_ALLOWED_HOSTS');
     const data = await fetchJson(`${baseUrl}/rest/system/resource`, { headers: { Authorization: `Basic ${auth}` } });
-    res.json({ connected: true, device: data['board-name'] || 'MikroTik', version: data.version || 'No informada', uptime: data.uptime || 'No informado' });
-  } catch (error) { res.status(error?.statusCode || 502).json({ connected: false, error: error.name === 'AbortError' ? 'Tiempo de espera agotado al conectar con MikroTik.' : error.message }); }
+    // RouterOS REST may return a single object (current versions) or a one-item array.
+    const resource = Array.isArray(data) ? data[0] : data;
+    if (!resource || typeof resource !== 'object' || Array.isArray(resource)) {
+      throw new Error('MikroTik devolvió una respuesta de recursos con formato inesperado.');
+    }
+    res.json({ connected: true, device: resource['board-name'] || resource.platform || 'MikroTik', version: resource.version || 'No informada', uptime: resource.uptime || 'No informado' });
+  } catch (error) { res.status(error?.statusCode || 502).json({ connected: false, error: error.name === 'AbortError' ? 'Tiempo de espera agotado al conectar con MikroTik.' : error.message, ...(error?.retryAfter ? { retryAfter: error.retryAfter } : {}) }); }
 });
 
 router.post('/smartolt/test', roles, async (req, res, next) => {
@@ -114,9 +125,11 @@ router.post('/smartolt/test', roles, async (req, res, next) => {
     const token = decrypt(config.smartoltApiTokenEnc);
     const baseUrl = httpsBaseUrl(config.smartoltBaseUrl, 'SMARTOLT_ALLOWED_HOSTS');
     const data = await fetchJson(`${baseUrl}/api/system/get_olts`, { headers: { 'X-Token': token } });
-    if (data.status === false) throw new Error(data.error || 'SmartOLT rechazó la autenticación.');
-    res.json({ connected: true, olts: Array.isArray(data.response) ? data.response.length : 0 });
-  } catch (error) { res.status(error?.statusCode || 502).json({ connected: false, error: error.name === 'AbortError' ? 'Tiempo de espera agotado al conectar con SmartOLT.' : error.message }); }
+    if (data?.status !== true || !Array.isArray(data.response)) {
+      throw new Error(data?.error || 'SmartOLT devolvió una respuesta inesperada al consultar las OLTs.');
+    }
+    res.json({ connected: true, olts: data.response.length });
+  } catch (error) { res.status(error?.statusCode || 502).json({ connected: false, error: error.name === 'AbortError' ? 'Tiempo de espera agotado al conectar con SmartOLT.' : error.message, ...(error?.retryAfter ? { retryAfter: error.retryAfter } : {}) }); }
 });
 
 router.get('/smartolt/unconfigured-onus', roles, async (req, res, next) => {
@@ -125,8 +138,24 @@ router.get('/smartolt/unconfigured-onus', roles, async (req, res, next) => {
     if (!config?.smartoltBaseUrl || !config.smartoltApiTokenEnc) return res.status(400).json({ error: 'Configura primero SmartOLT.' });
     const baseUrl = httpsBaseUrl(config.smartoltBaseUrl, 'SMARTOLT_ALLOWED_HOSTS');
     const data = await fetchJson(`${baseUrl}/api/onu/unconfigured_onus`, { headers: { 'X-Token': decrypt(config.smartoltApiTokenEnc) } });
-    if (data.status === false) throw new Error(data.error || 'SmartOLT no pudo consultar las ONUs.');
-    res.json({ items: data.response || [] });
+    if (data?.status !== true || !Array.isArray(data.response)) {
+      throw new Error(data?.error || 'SmartOLT devolvió una respuesta inesperada al consultar las ONUs pendientes.');
+    }
+    // Expose only documented inventory fields; this endpoint is read-only.
+    const items = data.response.map(onu => ({
+      id: onu.id ?? null,
+      ponType: onu.pon_type ?? null,
+      board: onu.board ?? null,
+      port: onu.port ?? null,
+      onu: onu.onu ?? null,
+      serial: onu.sn ?? null,
+      onuType: onu.onu_type_name ?? null,
+      onuTypeId: onu.onu_type_id ?? null,
+      oltId: onu.olt_id ?? null,
+      disabled: onu.is_disabled ?? null,
+      externalId: onu.external_id ?? null,
+    }));
+    res.json({ items });
   } catch (error) { next(error); }
 });
 
