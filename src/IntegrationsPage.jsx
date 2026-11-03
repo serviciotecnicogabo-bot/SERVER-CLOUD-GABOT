@@ -28,7 +28,7 @@ export default function IntegrationsPage({ token, user }) {
   }
   async function test(kind){
     setBusy(kind);setError('');setResults(v=>({...v,[kind]:null}));
-    try{setResults(v=>({...v,[kind]:await api('/'+kind+'/test',{method:'POST'})}));}
+    try{const result=await api('/'+kind+'/test',{method:'POST'});setResults(v=>({...v,[kind]:result}));}
     catch(e){setResults(v=>({...v,[kind]:{connected:false,error:e.message}}));}finally{setBusy('');}
   }
   async function scan(){
