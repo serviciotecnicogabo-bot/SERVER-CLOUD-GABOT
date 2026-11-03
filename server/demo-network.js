@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { allowRoles } from './middleware/auth.js';
+import { prisma } from './db.js';
 
 // Laboratorio en memoria: nunca realiza llamadas a MikroTik, SmartOLT ni a la base de datos.
 export function createDemoNetworkState() {
@@ -56,6 +57,25 @@ export function createDemoPppoe(state, input) {
 }
 
 
+
+export function provisionDemoSubscription(state, subscription, onuId) {
+  if (!subscription?.id || !subscription.pppoeUsername) {
+    throw Object.assign(new Error('El servicio no tiene un usuario PPPoE guardado.'), { statusCode: 400 });
+  }
+  const planBySpeed = { 300: '100', 450: '150', 650: '200' };
+  const expectedCode = planBySpeed[subscription.plan?.speedDown];
+  const actualCode = subscription.pppoeUsername.split('-').at(-1);
+  if (!expectedCode || actualCode !== expectedCode) {
+    throw Object.assign(new Error('El código PPPoE no coincide con la velocidad del plan guardado.'), { statusCode: 400 });
+  }
+  const record = createDemoPppoe(state, { onuId, username: subscription.pppoeUsername });
+  record.subscriptionId = subscription.id;
+  record.customerName = subscription.customer?.name || '';
+  record.planName = subscription.plan?.name || '';
+  state.events.unshift({ at: new Date().toISOString(), action: 'SUBSCRIPTION_PROVISIONED_SIMULATED', target: subscription.pppoeUsername });
+  return { ...record };
+}
+
 export function updateDemoPppoeStatus(state, username, action) {
   const record = state.pppoe.find(item => item.username === username);
   if (!record) throw Object.assign(new Error('Usuario PPPoE no encontrado en el laboratorio.'), { statusCode: 404 });
@@ -98,6 +118,30 @@ router.post('/onus/:id/authorize', (req, res) => {
   try { res.json({ simulated: true, onu: authorizeDemoOnu(state, req.params.id) }); }
   catch (error) { res.status(error.statusCode || 400).json({ error: error.message }); }
 });
+
+router.post('/subscriptions/:id/provision', async (req, res, next) => {
+  try {
+    const input = z.object({ onuId: z.string().min(1).max(80) }).strict().parse(req.body);
+    const subscription = await prisma.subscription.findFirst({
+      where: {
+        id: req.params.id,
+        customer: { is: { tenantId: req.user.tenantId } },
+        plan: { is: { tenantId: req.user.tenantId } },
+      },
+      include: {
+        customer: { select: { name: true } },
+        plan: { select: { name: true, speedDown: true, price: true } },
+      },
+    });
+    if (!subscription) return res.status(404).json({ error: 'Servicio no encontrado.' });
+    const pppoe = provisionDemoSubscription(state, subscription, input.onuId);
+    res.status(201).json({ simulated: true, hardwareChanged: false, persistence: 'MEMORY_ONLY', pppoe });
+  } catch (error) {
+    if (error.name === 'ZodError') return res.status(400).json({ error: 'Datos inválidos.' });
+    res.status(error.statusCode || 500).json({ error: error.statusCode ? error.message : 'No se pudo simular la provisión.' });
+  }
+});
+
 router.post('/pppoe', (req, res) => {
   try {
     const input = z.object({ onuId: z.string().min(1).max(80), username: z.string().trim().toLowerCase().max(80) }).parse(req.body);
