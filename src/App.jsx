@@ -16,6 +16,7 @@ const nav = [
   ]},
   { title: 'OPERACIONES FTTH', items: [
     ['network','Red y OLT',Network],
+    ['integrations','MikroTik / SmartOLT',Cable],
     ['onus','ONU / ONT',Router],
     ['incidents','Incidencias',LifeBuoy],
     ['technicians','Técnicos',Headset],
