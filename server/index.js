@@ -73,14 +73,29 @@ app.get('/api/me', async (req, res, next) => {
 app.get('/api/dashboard/summary', async (req, res, next) => {
   try {
     const tenantId = req.user.tenantId;
-    const [customers, activeCustomers, pendingInvoices, overdueInvoices, equipment] = await Promise.all([
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    const [customers, activeCustomers, activeSubscriptions, pendingInvoices, overdueInvoices, equipment, monthlyPayments] = await Promise.all([
       prisma.customer.count({ where: { tenantId } }),
       prisma.customer.count({ where: { tenantId, status: 'ACTIVE' } }),
+      prisma.subscription.count({ where: { status: 'ACTIVE', customer: { tenantId } } }),
       prisma.invoice.aggregate({ where: { tenantId, status: { in: ['ISSUED', 'PARTIAL'] } }, _sum: { balance: true }, _count: true }),
       prisma.invoice.aggregate({ where: { tenantId, status: 'OVERDUE' }, _sum: { balance: true }, _count: true }),
       prisma.networkEquipment.count({ where: { tenantId, active: true } }),
+      prisma.payment.aggregate({ where: { tenantId, paidAt: { gte: monthStart, lt: nextMonthStart } }, _sum: { amount: true } }),
     ]);
-    res.json({ customers, activeCustomers, pendingInvoices: pendingInvoices._count, pendingBalance: pendingInvoices._sum.balance || 0, overdueInvoices: overdueInvoices._count, overdueBalance: overdueInvoices._sum.balance || 0, registeredEquipment: equipment });
+    res.json({
+      customers,
+      activeCustomers,
+      activeSubscriptions,
+      pendingInvoices: pendingInvoices._count,
+      pendingBalance: pendingInvoices._sum.balance || 0,
+      overdueInvoices: overdueInvoices._count,
+      overdueBalance: overdueInvoices._sum.balance || 0,
+      registeredEquipment: equipment,
+      monthlyPayments: monthlyPayments._sum.amount || 0,
+    });
   } catch (error) { next(error); }
 });
 
