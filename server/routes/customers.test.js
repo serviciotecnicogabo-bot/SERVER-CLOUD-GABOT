@@ -109,6 +109,34 @@ test('rejects unknown fields and empty updates', async t => {
   assert.equal(updated, false);
 });
 
+test('creates a tenant-scoped CUSTOMER portal account with a password hash', async t => {
+  let customerArgs, userArgs, auditArgs;
+  const db = {
+    customer: { findFirst: async args => { customerArgs = args; return { id: 'c-1', tenantId: 'tenant-a', name: 'Ana Cliente', email: 'ana@example.com', portalUser: null }; } },
+    user: { create: async args => { userArgs = args; return { id: 'portal-1', name: args.data.name, email: args.data.email, role: args.data.role, active: true }; } },
+    auditLog: { create: async args => { auditArgs = args; } },
+  };
+  const app = await startApp({ db });
+  t.after(() => app.server.close());
+  const response = await app.request('/customers/c-1/portal-account', { method: 'POST', body: JSON.stringify({ password: 'cliente-password-segura' }) });
+  assert.equal(response.status, 201);
+  assert.equal(customerArgs.where.tenantId, 'tenant-a');
+  assert.equal(userArgs.data.customerId, 'c-1');
+  assert.equal(userArgs.data.email, 'ana@example.com');
+  assert.equal(userArgs.data.role, 'CUSTOMER');
+  assert.equal(userArgs.data.passwordHash.startsWith('$2'), true);
+  assert.equal(auditArgs.data.action, 'CREATE_CUSTOMER_PORTAL_ACCOUNT');
+});
+
+test('does not create portal accounts for customers from another tenant', async t => {
+  let created = false;
+  const app = await startApp({ db: { customer: { findFirst: async () => null }, user: { create: async () => { created = true; } } } });
+  t.after(() => app.server.close());
+  const response = await app.request('/customers/foreign/portal-account', { method: 'POST', body: JSON.stringify({ password: 'cliente-password-segura' }) });
+  assert.equal(response.status, 404);
+  assert.equal(created, false);
+});
+
 test('exports a default router for the API mount', () => {
   assert.equal(typeof customersRouter, 'function');
 });
