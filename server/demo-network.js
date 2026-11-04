@@ -149,7 +149,7 @@ function escapeHtml(value) {
 // Portal público deliberadamente limitado a cuentas ficticias del laboratorio.
 // No expone nombre legal, documento, correo, teléfono, dirección ni credenciales.
 export const demoPortalRouter = Router();
-demoPortalRouter.get('/:username', (req, res) => {
+demoPortalRouter.get('/:token', (req, res) => {
   const portalToken = String(req.params.token || '');
   const record = state.pppoe.find(item => item.portalToken === portalToken);
   if (!record) return res.status(404).type('html').send('<!doctype html><html lang="es"><meta charset="utf-8"><title>Cuenta no encontrada</title><body><h1>Cuenta de demostración no encontrada</h1></body></html>');
