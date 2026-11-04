@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { prisma } from '../db.js';
 import { allowRoles } from '../middleware/auth.js';
 
+export function createUsersRouter({ db = prisma, hashPassword = (value) => bcrypt.hash(value, 12) } = {}) {
 const router = Router();
 const managers = allowRoles('OWNER', 'ADMIN');
 const staffRoles = ['ADMIN', 'BILLING', 'SUPPORT', 'TECHNICIAN'];
@@ -15,7 +16,7 @@ function publicUser(user) {
 
 router.get('/', managers, async (req, res, next) => {
   try {
-    const users = await prisma.user.findMany({
+    const users = await db.user.findMany({
       where: { tenantId: req.user.tenantId },
       orderBy: [{ role: 'asc' }, { name: 'asc' }],
       select: { id: true, name: true, email: true, role: true, active: true, createdAt: true },
@@ -37,12 +38,12 @@ router.post('/', managers, async (req, res, next) => {
       return res.status(403).json({ error: 'Solo el propietario puede crear administradores.' });
     }
 
-    const passwordHash = await bcrypt.hash(input.password, 12);
+    const passwordHash = await hashPassword(input.password);
     const user = await prisma.user.create({
       data: { tenantId: req.user.tenantId, name: input.name, email: input.email, passwordHash, role: input.role },
       select: { id: true, name: true, email: true, role: true, active: true, createdAt: true },
     });
-    await prisma.auditLog.create({
+    await db.auditLog.create({
       data: { tenantId: req.user.tenantId, userId: req.user.id, action: 'CREATE_USER', entity: 'User', entityId: user.id, metadata: { role: user.role } },
     });
     res.status(201).json({ user });
@@ -95,4 +96,7 @@ router.patch('/:id', managers, async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
-export default router;
+return router;
+}
+
+export default createUsersRouter();
