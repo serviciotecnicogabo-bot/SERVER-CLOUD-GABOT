@@ -8,6 +8,7 @@ export default function CustomerPortalPage({ token, user, onLogout }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
+  const [reminderDismissed, setReminderDismissed] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -42,6 +43,7 @@ export default function CustomerPortalPage({ token, user, onLogout }) {
     <section className="customer-portal-card">
       <div className={'customer-portal-status ' + (suspended ? 'is-suspended' : 'is-active')}>{suspended ? <AlertTriangle size={20}/> : <CheckCircle2 size={20}/>}<div><b>{suspended ? 'Servicio suspendido' : 'Estado de tu servicio'}</b><span>{suspended ? 'Realiza el pago pendiente y comunícate con tu empresa para solicitar la reconexión.' : 'Consulta aquí tu plan y tus próximos pagos.'}</span></div></div>
       <p className="customer-portal-greeting">Hola, <b>{data.customer.name}</b></p>
+      {data.paymentReminder && !reminderDismissed && <section className="customer-portal-reminder" role="status"><div><BellRing size={20}/><div><b>Tu pago está próximo a vencer</b><span>Tienes {data.paymentReminder.invoices.length} factura(s) por {money(data.paymentReminder.amount, currency)} con vencimiento dentro de los próximos {data.paymentReminder.daysBeforeDue} días.</span></div></div><button type="button" aria-label="Cerrar aviso de pago" onClick={() => setReminderDismissed(true)}><span aria-hidden="true">×</span></button></section>}
       <div className="customer-portal-grid">
         <div><span>Plan contratado</span><b>{service?.plan?.name || 'Sin plan asignado'}</b></div>
         <div><span>Velocidad</span><b>{service?.plan ? service.plan.speedDown + ' / ' + service.plan.speedUp + ' Mbps' : '—'}</b></div>
