@@ -42,6 +42,16 @@ export function createPaymentNoticesRouter({ db = prisma } = {}) {
       if (!customer) return res.status(404).json({ error: 'Cliente no encontrado.' });
       const config = await db.paymentNoticeConfig.findUnique({ where: { tenantId: req.user.tenantId } });
       const subscription = customer.subscriptions[0] || null;
+      const now = new Date();
+      const reminderDays = config?.daysBeforeDue ?? defaults.daysBeforeDue;
+      const reminderCutoff = new Date(now.getTime() + reminderDays * 24 * 60 * 60 * 1000);
+      const upcomingInvoices = customer.invoices.filter(invoice => {
+        const dueDate = new Date(invoice.dueDate);
+        return Number(invoice.balance || 0) > 0 && dueDate >= now && dueDate <= reminderCutoff;
+      });
+      const paymentReminder = config?.enabled === false || customer.status === 'SUSPENDED' || subscription?.status === 'SUSPENDED' || upcomingInvoices.length === 0
+        ? null
+        : { daysBeforeDue: reminderDays, invoices: upcomingInvoices, amount: upcomingInvoices.reduce((sum, invoice) => sum + Number(invoice.balance || 0), 0) };
       res.json({
         customer: { id: customer.id, code: customer.code, name: customer.name, status: customer.status },
         service: subscription ? {
@@ -50,6 +60,7 @@ export function createPaymentNoticesRouter({ db = prisma } = {}) {
         } : null,
         invoices: customer.invoices,
         outstandingBalance: customer.invoices.reduce((sum, invoice) => sum + Number(invoice.balance || 0), 0),
+        paymentReminder,
         suspended: customer.status === 'SUSPENDED' || subscription?.status === 'SUSPENDED',
         notice: config?.enabled === false ? null : (config || defaults),
       });
