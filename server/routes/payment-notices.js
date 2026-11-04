@@ -21,6 +21,41 @@ export function createPaymentNoticesRouter({ db = prisma } = {}) {
     currency: 'PEN',
   };
 
+  router.get('/portal/me', allowRoles('CUSTOMER'), async (req, res, next) => {
+    try {
+      if (!req.user.customerId) return res.status(403).json({ error: 'Esta cuenta todavía no está vinculada a un cliente.' });
+      const customer = await db.customer.findFirst({
+        where: { id: req.user.customerId, tenantId: req.user.tenantId },
+        include: {
+          subscriptions: {
+            where: { status: { in: ['ACTIVE', 'SUSPENDED'] }, plan: { is: { tenantId: req.user.tenantId } } },
+            include: { plan: { select: { name: true, speedDown: true, speedUp: true, price: true, currency: true } } },
+            orderBy: { createdAt: 'desc' }, take: 1,
+          },
+          invoices: {
+            where: { tenantId: req.user.tenantId, balance: { gt: 0 }, status: { in: ['ISSUED', 'PARTIAL', 'OVERDUE'] } },
+            select: { id: true, number: true, dueDate: true, total: true, balance: true, currency: true, status: true },
+            orderBy: { dueDate: 'asc' }, take: 20,
+          },
+        },
+      });
+      if (!customer) return res.status(404).json({ error: 'Cliente no encontrado.' });
+      const config = await db.paymentNoticeConfig.findUnique({ where: { tenantId: req.user.tenantId } });
+      const subscription = customer.subscriptions[0] || null;
+      res.json({
+        customer: { id: customer.id, code: customer.code, name: customer.name, status: customer.status },
+        service: subscription ? {
+          status: subscription.status,
+          plan: subscription.plan,
+        } : null,
+        invoices: customer.invoices,
+        outstandingBalance: customer.invoices.reduce((sum, invoice) => sum + Number(invoice.balance || 0), 0),
+        suspended: customer.status === 'SUSPENDED' || subscription?.status === 'SUSPENDED',
+        notice: config?.enabled === false ? null : (config || defaults),
+      });
+    } catch (error) { next(error); }
+  });
+
   router.get('/config', async (req, res, next) => {
     try {
       const config = await db.paymentNoticeConfig.findUnique({ where: { tenantId: req.user.tenantId } });
