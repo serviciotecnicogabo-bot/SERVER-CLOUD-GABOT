@@ -106,6 +106,7 @@ model Customer {
   subscriptions Subscription[]
   invoices    Invoice[]
   payments    Payment[]
+  portalUser  User?
 
   @@unique([tenantId, code])
   @@index([tenantId, name])
