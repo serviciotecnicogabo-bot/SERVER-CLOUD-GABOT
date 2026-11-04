@@ -57,6 +57,13 @@ test('restricts configuration changes to billing and administrators', async t =>
   assert.equal(saved, false);
 });
 
+test('denies customer accounts that are not linked to a customer record', async t => {
+  const app = await startApp({ role: 'CUSTOMER', db: { customer: { findFirst: async () => assert.fail('must not query without a linked customer') } } });
+  t.after(() => app.server.close());
+  const response = await app.request('/notices/portal/me');
+  assert.equal(response.status, 403);
+});
+
 test('returns only the authenticated customer invoices, plan, suspension and tenant payment branding', async t => {
   let customerQuery;
   const db = {
@@ -70,19 +77,11 @@ test('returns only the authenticated customer invoices, plan, suspension and ten
     } },
     paymentNoticeConfig: { findUnique: async args => { assert.deepEqual(args.where, { tenantId: 'tenant-a' }); return { enabled: true, businessName: 'Fibra Demo', reconnectionFee: '15.00', qrDataUrl: 'data:image/png;base64,AAAA' }; } },
   };
-  const app = await startApp({ db, role: 'CUSTOMER' });
-  t.after(() => app.server.close());
-  // Simulate the customer identity populated by authentication middleware.
-  const original = app.request;
-  const response = await original('/notices/portal/me', { headers: { 'x-test-customer': 'customer-7' } });
-  assert.equal(response.status, 403);
-  assert.equal(customerQuery, undefined);
-  app.server.close();
   const portalApp = await startPortalApp({ db });
   t.after(() => portalApp.server.close());
-  const portalResponse = await portalApp.request('/notices/portal/me');
-  const payload = await portalResponse.json();
-  assert.equal(portalResponse.status, 200);
+  const response = await portalApp.request('/notices/portal/me');
+  const payload = await response.json();
+  assert.equal(response.status, 200);
   assert.equal(customerQuery.where.id, 'customer-7');
   assert.equal(customerQuery.where.tenantId, 'tenant-a');
   assert.equal(payload.service.plan.name, 'Fibra 150');
