@@ -34,7 +34,7 @@ export default function VirtualFtthLab(){
       const r=await fetch('/api/subscriptions/'+selected.id+'/status',{method:'PATCH',headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},body:JSON.stringify({status})});
       const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'No se pudo actualizar el servicio');
       setServices(items=>items.map(x=>x.id===selected.id?d.subscription:x));
-      setS(v=>({...v,suspended:status==='SUSPENDED',paid:status==='ACTIVE'&&v.suspended}));
+      setS(v=>({...v,suspended:status==='SUSPENDED',paid:status==='ACTIVE'&&serviceSuspended}));
       add(status==='SUSPENDED'?'Servicio '+selected.customer.name+' suspendido en la base de datos.':'Servicio '+selected.customer.name+' reactivado en la base de datos (prueba).');
     }catch(e){setApiError(e.message);}finally{setSaving(false);}
   }
