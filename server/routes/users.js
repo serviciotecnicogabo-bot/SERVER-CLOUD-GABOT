@@ -39,7 +39,7 @@ router.post('/', managers, async (req, res, next) => {
     }
 
     const passwordHash = await hashPassword(input.password);
-    const user = await prisma.user.create({
+    const user = await db.user.create({
       data: { tenantId: req.user.tenantId, name: input.name, email: input.email, passwordHash, role: input.role },
       select: { id: true, name: true, email: true, role: true, active: true, createdAt: true },
     });
@@ -59,7 +59,7 @@ router.patch('/:id', managers, async (req, res, next) => {
       active: z.boolean().optional(),
     }).strict().refine(value => Object.keys(value).length > 0, 'Indica al menos un cambio.').parse(req.body);
 
-    const existing = await prisma.user.findFirst({
+    const existing = await db.user.findFirst({
       where: { id: req.params.id, tenantId: req.user.tenantId },
       select: { id: true, role: true, active: true },
     });
@@ -75,16 +75,16 @@ router.patch('/:id', managers, async (req, res, next) => {
     }
 
     if (existing.role === 'OWNER' && (input.active === false || (input.role && input.role !== existing.role))) {
-      const owners = await prisma.user.count({ where: { tenantId: req.user.tenantId, role: 'OWNER', active: true } });
+      const owners = await db.user.count({ where: { tenantId: req.user.tenantId, role: 'OWNER', active: true } });
       if (owners <= 1) return res.status(409).json({ error: 'La empresa debe conservar al menos un propietario activo.' });
     }
 
     const data = { ...input };
     if (data.password) {
-      data.passwordHash = await bcrypt.hash(data.password, 12);
+      data.passwordHash = await hashPassword(data.password);
       delete data.password;
     }
-    const user = await prisma.user.update({
+    const user = await db.user.update({
       where: { id: existing.id },
       data,
       select: { id: true, name: true, email: true, role: true, active: true, createdAt: true },
