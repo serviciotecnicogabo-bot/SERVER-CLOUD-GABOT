@@ -57,4 +57,49 @@ test('restricts configuration changes to billing and administrators', async t =>
   assert.equal(saved, false);
 });
 
+test('returns only the authenticated customer invoices, plan, suspension and tenant payment branding', async t => {
+  let customerQuery;
+  const db = {
+    customer: { findFirst: async args => {
+      customerQuery = args;
+      return {
+        id: 'customer-7', tenantId: 'tenant-a', code: 'CLI-7', name: 'Cliente Demo', status: 'SUSPENDED',
+        subscriptions: [{ status: 'SUSPENDED', plan: { name: 'Fibra 150', speedDown: 450, speedUp: 100, price: '95.00', currency: 'PEN' } }],
+        invoices: [{ id: 'inv-1', number: 'F001', dueDate: new Date('2026-11-01'), total: '95.00', balance: '95.00', currency: 'PEN', status: 'OVERDUE' }],
+      };
+    } },
+    paymentNoticeConfig: { findUnique: async args => { assert.deepEqual(args.where, { tenantId: 'tenant-a' }); return { enabled: true, businessName: 'Fibra Demo', reconnectionFee: '15.00', qrDataUrl: 'data:image/png;base64,AAAA' }; } },
+  };
+  const app = await startApp({ db, role: 'CUSTOMER' });
+  t.after(() => app.server.close());
+  // Simulate the customer identity populated by authentication middleware.
+  const original = app.request;
+  const response = await original('/notices/portal/me', { headers: { 'x-test-customer': 'customer-7' } });
+  assert.equal(response.status, 403);
+  assert.equal(customerQuery, undefined);
+  app.server.close();
+  const portalApp = await startPortalApp({ db });
+  t.after(() => portalApp.server.close());
+  const portalResponse = await portalApp.request('/notices/portal/me');
+  const payload = await portalResponse.json();
+  assert.equal(portalResponse.status, 200);
+  assert.equal(customerQuery.where.id, 'customer-7');
+  assert.equal(customerQuery.where.tenantId, 'tenant-a');
+  assert.equal(payload.service.plan.name, 'Fibra 150');
+  assert.equal(payload.outstandingBalance, 95);
+  assert.equal(payload.suspended, true);
+  assert.equal(payload.notice.businessName, 'Fibra Demo');
+});
+
+async function startPortalApp({ db }) {
+  const app = express();
+  app.use(express.json({ limit: '1mb' }));
+  app.use((req, _res, next) => { req.user = { id: 'portal-user', tenantId: 'tenant-a', role: 'CUSTOMER', customerId: 'customer-7' }; next(); });
+  app.use('/notices', createPaymentNoticesRouter({ db }));
+  app.use((error, _req, res, _next) => res.status(error.name === 'ZodError' ? 400 : 500).json({ error: error.message }));
+  const server = await new Promise(resolve => { const instance = app.listen(0, '127.0.0.1', () => resolve(instance)); });
+  const address = server.address();
+  return { server, request: (path, options = {}) => fetch(`http://127.0.0.1:${address.port}${path}`, options) };
+}
+
 test('exports a default router for mounting', () => assert.equal(typeof router, 'function'));
