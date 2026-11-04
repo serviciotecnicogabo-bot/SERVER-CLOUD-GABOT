@@ -139,6 +139,29 @@ export function resetDemoNetwork(state) {
 
 const router = Router();
 const state = createDemoNetworkState();
+
+function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]);
+}
+
+// Portal público deliberadamente limitado a cuentas ficticias del laboratorio.
+// No expone nombre legal, documento, correo, teléfono, dirección ni credenciales.
+export const demoPortalRouter = Router();
+demoPortalRouter.get('/:username', (req, res) => {
+  const username = String(req.params.username || '');
+  const record = state.pppoe.find(item => item.username === username);
+  if (!record) return res.status(404).type('html').send('<!doctype html><html lang="es"><meta charset="utf-8"><title>Cuenta no encontrada</title><body><h1>Cuenta de demostración no encontrada</h1></body></html>');
+  const suspended = record.routerStatus === 'SUSPENDED' && record.billingStatus === 'OVERDUE';
+  const title = suspended ? 'Servicio temporalmente suspendido' : 'Servicio activo';
+  const heading = suspended ? 'Tu servicio está suspendido' : 'Tu conexión está activa';
+  const detail = suspended
+    ? 'Registramos una deuda pendiente en esta cuenta de prueba. Para continuar, comunícate con tu operador y solicita la confirmación del pago.'
+    : 'Esta cuenta de demostración no presenta una suspensión por deuda.';
+  res.set('Cache-Control', 'no-store');
+  res.type('html').send(`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(title)} · GABOT CLOUD</title><style>
+  *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:#0b1220;color:#edf3ff;font:16px system-ui,-apple-system,Segoe UI,sans-serif}.card{width:min(100%,520px);padding:32px;border:1px solid #293951;border-radius:20px;background:#121e30;box-shadow:0 20px 60px #0005}.brand{font-size:13px;letter-spacing:.14em;color:#91a6c3;font-weight:700}.mark{font-size:42px;margin:28px 0 12px}h1{font-size:28px;line-height:1.15;margin:0 0 12px}.detail{color:#b8c7dc;line-height:1.6}.data{margin-top:26px;padding:16px;border-radius:12px;background:#0b1525}.row{display:flex;justify-content:space-between;gap:16px;padding:9px 0;border-bottom:1px solid #26364d}.row:last-child{border:0}.label{color:#91a6c3}.value{text-align:right;font-weight:650;overflow-wrap:anywhere}.notice{margin-top:22px;padding:13px;border-radius:10px;background:${suspended ? '#482b26' : '#173b32'};color:${suspended ? '#ffd6c9' : '#baf4d8'};font-size:14px}footer{margin-top:24px;color:#71839d;font-size:12px}
+  </style></head><body><main class="card"><div class="brand">GABOT CLOUD · FTTH</div><div class="mark">${suspended ? '⚠️' : '✓'}</div><h1>${escapeHtml(heading)}</h1><p class="detail">${escapeHtml(detail)}</p><section class="data"><div class="row"><span class="label">Cuenta</span><span class="value">${escapeHtml(record.username)}</span></div><div class="row"><span class="label">Plan</span><span class="value">${escapeHtml(record.planName || `Plan ${record.planCode}`)}</span></div><div class="row"><span class="label">Velocidad</span><span class="value">${escapeHtml(record.speedMbps)} Mbps</span></div><div class="row"><span class="label">Estado</span><span class="value">${suspended ? 'Suspendido' : 'Activo'}</span></div></section><div class="notice">${suspended ? 'Esta es una simulación. No se ha bloqueado el acceso a Internet de ningún cliente real.' : 'Entorno de prueba: estado simulado.'}</div><footer>No mostramos DNI, contraseñas, correo ni otros datos personales en esta pantalla.</footer></main></body></html>`);
+});
 router.use(allowRoles('OWNER', 'ADMIN'));
 router.get('/status', (_req, res) => res.json({ mode: 'DEMO_ONLY', hardwareConnected: false, persistence: 'MEMORY_ONLY', ...state }));
 router.post('/onus/:id/authorize', (req, res) => {
