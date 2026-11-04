@@ -84,6 +84,20 @@ export default function DemoNetworkPage({ token }) {
     finally { setBusy(''); }
   }
 
+  async function billingAction(username, action) {
+    const label = action === 'overdue' ? 'marcar vencida y suspender' : 'registrar pago de prueba y reactivar';
+    if (!window.confirm('¿Deseas ' + label + ' la cuenta ' + username + '? Solo afecta al laboratorio virtual.')) return;
+    setBusy('billing'); setError(''); setMessage('');
+    try {
+      const data = await request('/billing/' + encodeURIComponent(username) + '/' + (action === 'overdue' ? 'overdue' : 'payment'), { method: 'POST' });
+      setMessage(action === 'overdue'
+        ? 'Vencimiento simulado: cuenta suspendida. Portal del cliente: ' + window.location.origin + '/demo-portal/' + encodeURIComponent(username)
+        : 'Pago de prueba registrado: cuenta reactivada automáticamente.');
+      await load();
+    } catch (e) { setError(e.message); }
+    finally { setBusy(''); }
+  }
+
   async function reset() {
     if (!window.confirm('¿Reiniciar los datos ficticios del laboratorio?')) return;
     setBusy('reset'); setError(''); setMessage('');
@@ -124,7 +138,7 @@ export default function DemoNetworkPage({ token }) {
       <section className="panel"><div className="panel-heading"><div><h2>Crear usuario PPPoE</h2><p>El formato usa zona + calle + número + código de plan.</p></div></div>
         <form onSubmit={createPppoe}><label style={{display:'block',fontSize:10,color:'#b8c4d6',marginBottom:12}}>Usuario PPPoE<input value={username} onChange={e=>setUsername(e.target.value.toLowerCase())} required pattern="[0-9]{2}[a-z]+[0-9]+-[0-9]{3}" style={{display:'block',width:'100%',maxWidth:420,height:39,marginTop:7,border:'1px solid #34435c',background:'#0c1526',color:'#fff',borderRadius:8,padding:'0 11px'}}/></label><p className="integration-hint">100 = 300 Mbps / S/75 · 150 = 450 Mbps / S/95 · 200 = 650 Mbps / S/125. El código de plan no es una VLAN.</p><button className="primary-button" disabled={!selectedOnu||!!busy||state.onus.find(x=>x.id===selectedOnu)?.status!=='AUTHORIZED'}>{busy==='pppoe'?'Creando...':'Crear PPPoE (demo)'}</button></form>
       </section>
-      <section className="panel"><div className="panel-heading"><div><h2>Sesiones PPPoE simuladas</h2><p>No existen en ningún router real.</p></div></div><div className="table-wrap"><table><thead><tr><th>USUARIO</th><th>PLAN</th><th>VELOCIDAD</th><th>PRECIO</th><th>ESTADO</th></tr></thead><tbody>{state.pppoe.map(p=><tr key={p.id}><td>{p.username}</td><td>{p.planCode}</td><td>{p.speedMbps} Mbps</td><td>S/ {p.pricePen}</td><td>Simulado</td></tr>)}</tbody></table>{!state.pppoe.length&&<div className="empty">Todavía no hay usuarios PPPoE simulados.</div>}</div></section>
+      <section className="panel"><div className="panel-heading"><div><h2>Facturación, suspensión y reconexión (demo)</h2><p>Simula una factura vencida, consulta el aviso del cliente y registra un pago de prueba.</p></div><span className="status-chip"><i/> Sin pagos reales</span></div><div className="table-wrap"><table><thead><tr><th>CUENTA</th><th>PLAN</th><th>ESTADO DE CUENTA</th><th>ESTADO DE SERVICIO</th><th>ACCIONES</th></tr></thead><tbody>{state.pppoe.map(p=><tr key={p.id}><td>{p.username}</td><td>{p.planName || ('Plan '+p.planCode)} · {p.speedMbps} Mbps</td><td>{p.billingStatus === 'OVERDUE' ? 'Vencida' : p.billingStatus === 'PAID' ? 'Pagada (demo)' : 'Al día (demo)'}</td><td>{p.routerStatus === 'SUSPENDED' ? 'Suspendido' : 'Activo'}</td><td><div className="integration-actions">{p.billingStatus === 'OVERDUE' ? <button className="outline-button" disabled={!!busy} onClick={()=>billingAction(p.username,'payment')}>Registrar pago demo</button> : <button className="outline-button" disabled={!!busy} onClick={()=>billingAction(p.username,'overdue')}>Simular vencimiento</button>}<a className="outline-button" href={'/demo-portal/'+encodeURIComponent(p.username)} target="_blank" rel="noreferrer">Ver aviso cliente</a></div></td></tr>)}</tbody></table>{!state.pppoe.length&&<div className="empty">Primero crea una sesión PPPoE simulada.</div>}</div><p className="integration-hint">El portal público solo muestra cuenta, plan, velocidad y estado. No muestra DNI, contraseñas ni datos personales. Las acciones no generan cargos ni pagos reales.</p></section>
 
       <section className="panel"><div className="panel-heading"><div><h2>Simulador MikroTik RouterOS</h2><p>{state.mikrotik?.name || 'MIKROTIK-DEMO-01'} · entorno virtual sin conexión a RouterOS real.</p></div><span className="status-chip"><i/> Solo demo</span></div>
         <div className="table-wrap"><table><thead><tr><th>SECRET PPPoE</th><th>PERFIL</th><th>ESTADO ROUTEROS</th><th>ACCIONES SIMULADAS</th></tr></thead><tbody>{state.pppoe.map(p=><tr key={p.id}><td>{p.username}</td><td>{p.speedMbps} Mbps · Plan {p.planCode}</td><td>{p.routerStatus === 'SUSPENDED' ? 'Suspendido' : 'Activo'}</td><td><div className="integration-actions">
