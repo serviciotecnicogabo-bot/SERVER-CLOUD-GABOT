@@ -73,7 +73,7 @@ router.patch('/:id', managers, async (req, res, next) => {
       return res.status(400).json({ error: 'No puedes desactivar ni cambiar tu propio rol.' });
     }
 
-    if (existing.role === 'OWNER' && (input.active === false || (input.role && input.role !== 'ADMIN'))) {
+    if (existing.role === 'OWNER' && (input.active === false || (input.role && input.role !== existing.role))) {
       const owners = await prisma.user.count({ where: { tenantId: req.user.tenantId, role: 'OWNER', active: true } });
       if (owners <= 1) return res.status(409).json({ error: 'La empresa debe conservar al menos un propietario activo.' });
     }
