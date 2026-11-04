@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { prisma } from './db.js';
 import { requireAuth, allowRoles } from './middleware/auth.js';
 import integrationsRouter from './routes/integrations.js';
-import demoNetworkRouter from './demo-network.js';
+import demoNetworkRouter, { demoPortalRouter } from './demo-network.js';
 import provisioningRouter from './routes/provisioning.js';
 
 const app = express();
@@ -62,6 +62,10 @@ app.post('/api/auth/login', async (req, res, next) => {
     res.json({ token, expiresIn: process.env.JWT_EXPIRES_IN || '8h', user: { id: user.id, name: user.name, email: user.email, role: user.role, tenant: tenant.name } });
   } catch (error) { next(error); }
 });
+
+if (process.env.NODE_ENV !== 'production' && process.env.GABOT_DEMO_MODE === 'true') {
+  app.use('/demo-portal', demoPortalRouter);
+}
 
 app.use('/api', requireAuth);
 app.use('/api/integrations', integrationsRouter);
