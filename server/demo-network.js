@@ -95,6 +95,30 @@ export function updateDemoPppoeStatus(state, username, action) {
   return { ...record };
 }
 
+export function markDemoOverdue(state, username) {
+  const record = state.pppoe.find(item => item.username === username);
+  if (!record) throw Object.assign(new Error('Cuenta de laboratorio no encontrada.'), { statusCode: 404 });
+  if (record.billingStatus === 'OVERDUE') throw Object.assign(new Error('La cuenta ya figura vencida.'), { statusCode: 409 });
+  record.billingStatus = 'OVERDUE';
+  record.routerStatus = 'SUSPENDED';
+  record.suspendedAt = new Date().toISOString();
+  state.events.unshift({ at: new Date().toISOString(), action: 'OVERDUE_AND_SUSPENDED_SIMULATED', target: username });
+  return { ...record };
+}
+
+export function recordDemoPayment(state, username) {
+  const record = state.pppoe.find(item => item.username === username);
+  if (!record) throw Object.assign(new Error('Cuenta de laboratorio no encontrada.'), { statusCode: 404 });
+  if (record.billingStatus !== 'OVERDUE' || record.routerStatus !== 'SUSPENDED') {
+    throw Object.assign(new Error('La cuenta no tiene una suspensión por deuda pendiente.'), { statusCode: 409 });
+  }
+  record.billingStatus = 'PAID';
+  record.routerStatus = 'ACTIVE';
+  record.paidAt = new Date().toISOString();
+  state.events.unshift({ at: new Date().toISOString(), action: 'PAYMENT_RECEIVED_AND_REACTIVATED_SIMULATED', target: username });
+  return { ...record };
+}
+
 export function deleteDemoPppoe(state, username) {
   const index = state.pppoe.findIndex(item => item.username === username);
   if (index < 0) throw Object.assign(new Error('Usuario PPPoE no encontrado en el laboratorio.'), { statusCode: 404 });
@@ -162,6 +186,18 @@ router.delete('/mikrotik/:username', (req, res) => {
   try {
     const username = z.string().min(1).max(80).parse(req.params.username);
     res.json({ simulated: true, hardwareChanged: false, pppoe: deleteDemoPppoe(state, username) });
+  } catch (error) { res.status(error.statusCode || 400).json({ error: error.message }); }
+});
+router.post('/billing/:username/overdue', (req, res) => {
+  try {
+    const username = z.string().min(1).max(80).parse(req.params.username);
+    res.json({ simulated: true, hardwareChanged: false, account: markDemoOverdue(state, username) });
+  } catch (error) { res.status(error.statusCode || 400).json({ error: error.message }); }
+});
+router.post('/billing/:username/payment', (req, res) => {
+  try {
+    const username = z.string().min(1).max(80).parse(req.params.username);
+    res.json({ simulated: true, hardwareChanged: false, account: recordDemoPayment(state, username) });
   } catch (error) { res.status(error.statusCode || 400).json({ error: error.message }); }
 });
 router.post('/reset', (_req, res) => res.json({ simulated: true, hardwareChanged: false, state: resetDemoNetwork(state) }));
