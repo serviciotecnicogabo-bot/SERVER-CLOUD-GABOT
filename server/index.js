@@ -64,7 +64,7 @@ app.post('/api/auth/login', async (req, res, next) => {
 });
 
 if (process.env.NODE_ENV !== 'production' && process.env.GABOT_DEMO_MODE === 'true') {
-  app.use('/demo-portal', demoPortalRouter);
+  app.use('/api/demo-portal', demoPortalRouter);
 }
 
 app.use('/api', requireAuth);
