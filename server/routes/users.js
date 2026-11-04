@@ -89,7 +89,7 @@ router.patch('/:id', managers, async (req, res, next) => {
       data,
       select: { id: true, name: true, email: true, role: true, active: true, createdAt: true },
     });
-    await prisma.auditLog.create({
+    await db.auditLog.create({
       data: { tenantId: req.user.tenantId, userId: req.user.id, action: 'UPDATE_USER', entity: 'User', entityId: user.id, metadata: { fields: Object.keys(input).filter(field => field !== 'password') } },
     });
     res.json({ user });
