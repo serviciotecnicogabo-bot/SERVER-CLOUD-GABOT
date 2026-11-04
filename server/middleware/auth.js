@@ -17,7 +17,7 @@ export function createRequireAuth({ verifyToken = jwt.verify, findActiveUser }) 
     try {
       const user = await findActiveUser(payload.sub, payload.tenantId);
       if (!user) return res.status(401).json({ error: 'Usuario no disponible o desactivado.' });
-      req.user = { id: user.id, tenantId: user.tenantId, role: user.role, customerId: user.customerId || null };
+      req.user = { id: user.id, tenantId: user.tenantId, role: user.role, ...(user.customerId ? { customerId: user.customerId } : {}) };
       return next();
     } catch (error) {
       return next(error);
