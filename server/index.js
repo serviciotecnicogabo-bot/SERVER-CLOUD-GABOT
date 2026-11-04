@@ -12,6 +12,8 @@ import integrationsRouter from './routes/integrations.js';
 import demoNetworkRouter from './demo-network.js';
 import provisioningRouter from './routes/provisioning.js';
 import demoOnuIpRouter from './routes/demo-onu-ip.js';
+import usersRouter from './routes/users.js';
+import customersRouter from './routes/customers.js';
 
 const app = express();
 const port = Number(process.env.API_PORT || 4000);
@@ -67,6 +69,8 @@ app.post('/api/auth/login', async (req, res, next) => {
 app.use('/api', requireAuth);
 app.use('/api/integrations', integrationsRouter);
 app.use('/api/provisioning', provisioningRouter);
+app.use('/api/users', usersRouter);
+app.use('/api/customers', customersRouter);
 if (process.env.NODE_ENV !== 'production' && process.env.GABOT_DEMO_MODE === 'true') {
   app.use('/api/demo-network', demoNetworkRouter);
   app.use('/api/demo-onu-ip', demoOnuIpRouter);
@@ -109,54 +113,6 @@ app.get('/api/dashboard/summary', async (req, res, next) => {
       registeredEquipment: equipment,
       monthlyPayments: monthlyPayments._sum.amount || 0,
     });
-  } catch (error) { next(error); }
-});
-
-app.get('/api/customers', async (req, res, next) => {
-  try {
-    const page = Math.max(1, Number(req.query.page) || 1);
-    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
-    const search = String(req.query.search || '').trim();
-    const where = {
-      tenantId: req.user.tenantId,
-      ...(search ? { OR: [{ name: { contains: search, mode: 'insensitive' } }, { code: { contains: search, mode: 'insensitive' } }, { document: { contains: search } }] } : {}),
-    };
-    const [items, total] = await Promise.all([
-      prisma.customer.findMany({ where, orderBy: { createdAt: 'desc' }, skip: (page - 1) * limit, take: limit }),
-      prisma.customer.count({ where }),
-    ]);
-    res.json({ items, pagination: { page, limit, total, pages: Math.ceil(total / limit) } });
-  } catch (error) { next(error); }
-});
-
-app.post('/api/customers', allowRoles('OWNER', 'ADMIN', 'BILLING', 'SUPPORT'), async (req, res, next) => {
-  try {
-    const input = z.object({
-      name: z.string().trim().min(2).max(160),
-      document: z.string().trim().max(30).optional(),
-      email: z.string().email().max(180).optional(),
-      phone: z.string().trim().max(40).optional(),
-      address: z.string().trim().max(240).optional(),
-      district: z.string().trim().max(100).optional(),
-      notes: z.string().trim().max(1000).optional(),
-    }).parse(req.body);
-    const count = await prisma.customer.count({ where: { tenantId: req.user.tenantId } });
-    const customer = await prisma.customer.create({
-      data: { ...input, tenantId: req.user.tenantId, code: `CLI-${String(count + 1).padStart(5, '0')}` },
-    });
-    await prisma.auditLog.create({ data: { tenantId: req.user.tenantId, userId: req.user.id, action: 'CREATE', entity: 'Customer', entityId: customer.id } });
-    res.status(201).json({ customer });
-  } catch (error) { next(error); }
-});
-
-app.patch('/api/customers/:id/status', allowRoles('OWNER', 'ADMIN', 'SUPPORT'), async (req, res, next) => {
-  try {
-    const { status } = z.object({ status: z.enum(['ACTIVE', 'SUSPENDED', 'PENDING', 'INACTIVE']) }).parse(req.body);
-    const result = await prisma.customer.updateMany({ where: { id: req.params.id, tenantId: req.user.tenantId }, data: { status } });
-    if (!result.count) return res.status(404).json({ error: 'Cliente no encontrado.' });
-    const customer = await prisma.customer.findFirst({ where: { id: req.params.id, tenantId: req.user.tenantId } });
-    await prisma.auditLog.create({ data: { tenantId: req.user.tenantId, userId: req.user.id, action: 'UPDATE_STATUS', entity: 'Customer', entityId: customer.id, metadata: { status } } });
-    res.json({ customer });
   } catch (error) { next(error); }
 });
 
