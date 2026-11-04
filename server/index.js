@@ -9,6 +9,8 @@ import { z } from 'zod';
 import { prisma } from './db.js';
 import { requireAuth, allowRoles } from './middleware/auth.js';
 import integrationsRouter from './routes/integrations.js';
+import demoNetworkRouter, { demoPortalRouter } from './demo-network.js';
+import provisioningRouter from './routes/provisioning.js';
 
 const app = express();
 const port = Number(process.env.API_PORT || 4000);
@@ -24,6 +26,9 @@ if (!process.env.DATABASE_URL) {
 }
 
 app.disable('x-powered-by');
+// Codespaces and production ingress terminate TLS/proxy traffic before Express.
+// Trust exactly one proxy hop so express-rate-limit can use the forwarded client IP.
+app.set('trust proxy', 1);
 app.use(helmet());
 app.use(cors({ origin: origins, credentials: false }));
 app.use(express.json({ limit: '1mb' }));
@@ -58,8 +63,16 @@ app.post('/api/auth/login', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+if (process.env.NODE_ENV !== 'production' && process.env.GABOT_DEMO_MODE === 'true') {
+  app.use('/api/demo-portal', demoPortalRouter);
+}
+
 app.use('/api', requireAuth);
 app.use('/api/integrations', integrationsRouter);
+app.use('/api/provisioning', provisioningRouter);
+if (process.env.NODE_ENV !== 'production' && process.env.GABOT_DEMO_MODE === 'true') {
+  app.use('/api/demo-network', demoNetworkRouter);
+}
 
 app.get('/api/me', async (req, res, next) => {
   try {
@@ -199,6 +212,36 @@ app.patch('/api/subscriptions/:id/status', allowRoles('OWNER', 'ADMIN', 'SUPPORT
   } catch (error) { next(error); }
 });
 
+app.patch('/api/subscriptions/:id/network', allowRoles('OWNER', 'ADMIN', 'SUPPORT', 'TECHNICIAN'), async (req, res, next) => {
+  try {
+    const input = z.object({
+      pppoeUsername: z.string().trim().toLowerCase().regex(/^[0-9]{2}[a-z]+[0-9]+-[0-9]{3}$/).optional().nullable(),
+      zone: z.string().trim().max(100).optional().nullable(),
+      streetName: z.string().trim().max(120).optional().nullable(),
+      streetNumber: z.string().trim().max(30).optional().nullable(),
+      vlanId: z.number().int().min(1).max(4094).optional().nullable(),
+      onuSerial: z.string().trim().max(80).optional().nullable(),
+      oltName: z.string().trim().max(120).optional().nullable(),
+      ponPort: z.string().trim().max(40).optional().nullable(),
+    }).strict().refine(value => Object.keys(value).length > 0, 'Indica al menos un dato de red.').parse(req.body);
+    const existing = await prisma.subscription.findFirst({
+      where: { id: req.params.id, customer: { is: { tenantId: req.user.tenantId } }, plan: { is: { tenantId: req.user.tenantId } } },
+      select: { id: true },
+    });
+    if (!existing) return res.status(404).json({ error: 'Servicio no encontrado.' });
+    const subscription = await prisma.subscription.update({
+      where: { id: existing.id },
+      data: input,
+      include: {
+        customer: { select: { id: true, code: true, name: true, district: true } },
+        plan: { select: { id: true, name: true, speedDown: true, speedUp: true, price: true, currency: true } },
+      },
+    });
+    await prisma.auditLog.create({ data: { tenantId: req.user.tenantId, userId: req.user.id, action: 'UPDATE_NETWORK_IDENTITY', entity: 'Subscription', entityId: subscription.id, metadata: { fields: Object.keys(input) } } });
+    res.json({ subscription });
+  } catch (error) { next(error); }
+});
+
 app.get('/api/plans', async (req, res, next) => {
   try {
     const items = await prisma.plan.findMany({ where: { tenantId: req.user.tenantId }, orderBy: { price: 'asc' } });
@@ -253,6 +296,7 @@ app.get('/api/equipment', allowRoles('OWNER', 'ADMIN', 'TECHNICIAN', 'SUPPORT'),
 
 app.use((error, _req, res, _next) => {
   if (error?.name === 'ZodError') return res.status(400).json({ error: 'Datos inválidos.', details: error.issues });
+  if (Number.isInteger(error?.statusCode) && error.statusCode >= 400 && error.statusCode < 500) return res.status(error.statusCode).json({ error: error.message });
   if (error?.code === 'P2002') return res.status(409).json({ error: 'Ya existe un registro con esos datos.' });
   console.error(error);
   res.status(500).json({ error: 'Error interno del servidor.' });

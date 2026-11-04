@@ -49,6 +49,14 @@ La prueba consulta `/rest/system/resource`. Esta entrega no crea secretos PPP to
 
 La autorización de una ONU es una operación real de red. Antes de habilitarla en GABOT hay que confirmar OLT, PON, tarjeta, puerto, número de serie, tipo de ONU, perfiles ópticos, modo bridge/routing, VLAN real y zona. El código comercial al final del usuario PPPoE (por ejemplo `-150`) identifica el plan y nunca se tratará como VLAN real.
 
+## Lista de destinos autorizados
+
+Antes de guardar una URL de equipo, añade su autoridad HTTPS exacta (host y, solo si es distinto del puerto HTTPS estándar, puerto) a una variable privada del servidor:
+- `MIKROTIK_ALLOWED_HOSTS=router.vpn.empresa`
+- `SMARTOLT_ALLOWED_HOSTS=cuenta.smartolt.com`
+
+Si se usan varios destinos, sepáralos con comas. No incluyas `https://` ni `:443` en estas variables; añade el puerto solo si no es el 443 estándar. La aplicación rechaza destinos que no estén en la lista y no sigue redirecciones HTTP. Mantén las listas vacías hasta que el administrador confirme los hosts de laboratorio autorizados. No uses comodines.
+
 ## Seguridad y operación
 
 - Los secretos se cifran con AES-256-GCM antes de guardarse en Neon.
