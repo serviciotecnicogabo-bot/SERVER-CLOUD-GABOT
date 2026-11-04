@@ -102,3 +102,23 @@ async function startPortalApp({ db }) {
 }
 
 test('exports a default router for mounting', () => assert.equal(typeof router, 'function'));
+
+test('returns a reminder only for unpaid invoices due within the tenant configured window', async t => {
+  const dueDate = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
+  const db = {
+    customer: { findFirst: async () => ({
+      id: 'customer-7', tenantId: 'tenant-a', code: 'CLI-7', name: 'Cliente Demo', status: 'ACTIVE',
+      subscriptions: [{ status: 'ACTIVE', plan: { name: 'Fibra 150', speedDown: 450, speedUp: 100, price: '95.00', currency: 'PEN' } }],
+      invoices: [{ id: 'inv-2', number: 'F002', dueDate, total: '95.00', balance: '95.00', currency: 'PEN', status: 'ISSUED' }],
+    }) },
+    paymentNoticeConfig: { findUnique: async () => ({ enabled: true, daysBeforeDue: 3, businessName: 'Fibra Demo' }) },
+  };
+  const app = await startPortalApp({ db });
+  t.after(() => app.server.close());
+  const response = await app.request('/notices/portal/me');
+  const payload = await response.json();
+  assert.equal(response.status, 200);
+  assert.equal(payload.paymentReminder.daysBeforeDue, 3);
+  assert.equal(payload.paymentReminder.invoices[0].number, 'F002');
+  assert.equal(payload.paymentReminder.amount, 95);
+});
