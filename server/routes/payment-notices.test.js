@@ -122,3 +122,27 @@ test('returns a reminder only for unpaid invoices due within the tenant configur
   assert.equal(payload.paymentReminder.invoices[0].number, 'F002');
   assert.equal(payload.paymentReminder.amount, 95);
 });
+
+test('does not return a reminder for overdue invoices', async t => {
+  const db = {
+    customer: { findFirst: async () => ({ id: 'customer-7', tenantId: 'tenant-a', code: 'CLI-7', name: 'Cliente Demo', status: 'ACTIVE', subscriptions: [{ status: 'ACTIVE', plan: { name: 'Fibra', speedDown: 100, speedUp: 50, price: '50.00', currency: 'PEN' } }], invoices: [{ id: 'inv-old', number: 'F-OLD', dueDate: new Date(Date.now() - 24 * 60 * 60 * 1000), balance: '50.00', currency: 'PEN' }] }) },
+    paymentNoticeConfig: { findUnique: async () => ({ enabled: true, daysBeforeDue: 5 }) },
+  };
+  const app = await startPortalApp({ db });
+  t.after(() => app.server.close());
+  const payload = await (await app.request('/notices/portal/me')).json();
+  assert.equal(payload.paymentReminder, null);
+});
+
+test('does not return a reminder when notices are disabled or the service is suspended', async t => {
+  for (const scenario of [{ enabled: false, status: 'ACTIVE' }, { enabled: true, status: 'SUSPENDED' }]) {
+    const db = {
+      customer: { findFirst: async () => ({ id: 'customer-7', tenantId: 'tenant-a', code: 'CLI-7', name: 'Cliente Demo', status: scenario.status, subscriptions: [{ status: scenario.status, plan: { name: 'Fibra', speedDown: 100, speedUp: 50, price: '50.00', currency: 'PEN' } }], invoices: [{ id: 'inv-next', number: 'F-NEXT', dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000), balance: '50.00', currency: 'PEN' }] }) },
+      paymentNoticeConfig: { findUnique: async () => ({ enabled: scenario.enabled, daysBeforeDue: 5 }) },
+    };
+    const app = await startPortalApp({ db });
+    const payload = await (await app.request('/notices/portal/me')).json();
+    assert.equal(payload.paymentReminder, null);
+    await new Promise(resolve => app.server.close(resolve));
+  }
+});
