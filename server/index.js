@@ -12,6 +12,7 @@ import integrationsRouter from './routes/integrations.js';
 import demoNetworkRouter from './demo-network.js';
 import provisioningRouter from './routes/provisioning.js';
 import demoOnuIpRouter from './routes/demo-onu-ip.js';
+import usersRouter from './routes/users.js';
 
 const app = express();
 const port = Number(process.env.API_PORT || 4000);
@@ -67,6 +68,7 @@ app.post('/api/auth/login', async (req, res, next) => {
 app.use('/api', requireAuth);
 app.use('/api/integrations', integrationsRouter);
 app.use('/api/provisioning', provisioningRouter);
+app.use('/api/users', usersRouter);
 if (process.env.NODE_ENV !== 'production' && process.env.GABOT_DEMO_MODE === 'true') {
   app.use('/api/demo-network', demoNetworkRouter);
   app.use('/api/demo-onu-ip', demoOnuIpRouter);
