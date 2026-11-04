@@ -14,6 +14,7 @@ import provisioningRouter from './routes/provisioning.js';
 import demoOnuIpRouter from './routes/demo-onu-ip.js';
 import usersRouter from './routes/users.js';
 import customersRouter from './routes/customers.js';
+import paymentNoticesRouter from './routes/payment-notices.js';
 
 const app = express();
 const port = Number(process.env.API_PORT || 4000);
@@ -71,6 +72,7 @@ app.use('/api/integrations', integrationsRouter);
 app.use('/api/provisioning', provisioningRouter);
 app.use('/api/users', usersRouter);
 app.use('/api/customers', customersRouter);
+app.use('/api/payment-notices', paymentNoticesRouter);
 if (process.env.NODE_ENV !== 'production' && process.env.GABOT_DEMO_MODE === 'true') {
   app.use('/api/demo-network', demoNetworkRouter);
   app.use('/api/demo-onu-ip', demoOnuIpRouter);

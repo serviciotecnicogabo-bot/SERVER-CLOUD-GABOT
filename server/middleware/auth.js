@@ -17,7 +17,7 @@ export function createRequireAuth({ verifyToken = jwt.verify, findActiveUser }) 
     try {
       const user = await findActiveUser(payload.sub, payload.tenantId);
       if (!user) return res.status(401).json({ error: 'Usuario no disponible o desactivado.' });
-      req.user = { id: user.id, tenantId: user.tenantId, role: user.role };
+      req.user = { id: user.id, tenantId: user.tenantId, role: user.role, ...(user.customerId ? { customerId: user.customerId } : {}) };
       return next();
     } catch (error) {
       return next(error);
@@ -28,7 +28,7 @@ export function createRequireAuth({ verifyToken = jwt.verify, findActiveUser }) 
 export const requireAuth = createRequireAuth({
   findActiveUser: (id, tenantId) => prisma.user.findFirst({
     where: { id, tenantId, active: true },
-    select: { id: true, tenantId: true, role: true },
+    select: { id: true, tenantId: true, role: true, customerId: true },
   }),
 });
 
