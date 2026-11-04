@@ -161,6 +161,8 @@ export function simulatePaymentAccess(state, input, now = new Date()) {
 
 
 const router = Router();
+// Every laboratory endpoint, including payment-access evaluation, is restricted to operators.
+router.use(allowRoles('OWNER', 'ADMIN'));
 router.post('/mikrotik/payment-access', (req, res) => {
   try {
     const input = z.object({
@@ -178,7 +180,6 @@ router.post('/mikrotik/payment-access', (req, res) => {
 });
 
 const state = createDemoNetworkState();
-router.use(allowRoles('OWNER', 'ADMIN'));
 router.get('/status', (_req, res) => res.json({ mode: 'DEMO_ONLY', hardwareConnected: false, persistence: 'MEMORY_ONLY', ...state }));
 router.post('/onus/:id/authorize', (req, res) => {
   try { res.json({ simulated: true, onu: authorizeDemoOnu(state, req.params.id) }); }
