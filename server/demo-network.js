@@ -113,6 +113,67 @@ export function resetDemoNetwork(state) {
   return state;
 }
 
+
+/**
+ * Decide how the virtual RouterOS laboratory treats a subscriber's web access.
+ * This is a policy simulation only; it does not intercept traffic or contact hardware.
+ */
+export function simulatePaymentAccess(state, input, now = new Date()) {
+  const record = state.pppoe.find(item => item.username === input.username);
+  if (!record) throw Object.assign(new Error('Usuario PPPoE no encontrado en el laboratorio.'), { statusCode: 404 });
+
+  const balance = Number(input.balance);
+  if (!Number.isFinite(balance) || balance < 0) {
+    throw Object.assign(new Error('El saldo pendiente debe ser un número igual o mayor que cero.'), { statusCode: 400 });
+  }
+  const reminderDays = Number(input.reminderDays ?? 3);
+  if (!Number.isInteger(reminderDays) || reminderDays < 0 || reminderDays > 30) {
+    throw Object.assign(new Error('Los días de aviso deben estar entre 0 y 30.'), { statusCode: 400 });
+  }
+
+  let result;
+  if (record.routerStatus === 'SUSPENDED') {
+    result = { decision: 'REDIRECT_TO_PAYMENT', path: '/portal/regularizar', dismissible: false, reason: 'SERVICE_SUSPENDED' };
+  } else if (balance > 0 && input.dueDate && new Date(input.dueDate).getTime() < now.getTime()) {
+    result = { decision: 'REDIRECT_TO_PAYMENT', path: '/portal/regularizar', dismissible: false, reason: 'INVOICE_OVERDUE' };
+  } else if (balance > 0 && input.dueDate) {
+    const due = new Date(input.dueDate);
+    const cutoff = new Date(now.getTime() + reminderDays * 24 * 60 * 60 * 1000);
+    if (Number.isNaN(due.getTime())) {
+      throw Object.assign(new Error('La fecha de vencimiento no es válida.'), { statusCode: 400 });
+    }
+    result = due <= cutoff
+      ? { decision: 'SHOW_DISMISSIBLE_REMINDER', path: '/portal/aviso-pago', dismissible: true, reason: 'DUE_SOON' }
+      : { decision: 'ALLOW', path: null, dismissible: false, reason: 'NOT_DUE_SOON' };
+  } else {
+    result = { decision: 'ALLOW', path: null, dismissible: false, reason: 'NO_OUTSTANDING_BALANCE' };
+  }
+
+  state.events.unshift({
+    at: now.toISOString(),
+    action: 'PAYMENT_ACCESS_EVALUATED_SIMULATED',
+    target: record.username,
+    decision: result.decision,
+  });
+  return { simulated: true, hardwareChanged: false, ...result };
+}
+
+router.post('/mikrotik/payment-access', (req, res) => {
+  try {
+    const input = z.object({
+      username: z.string().trim().min(1).max(80),
+      balance: z.number().nonnegative(),
+      dueDate: z.string().datetime().optional().nullable(),
+      reminderDays: z.number().int().min(0).max(30).default(3),
+    }).strict().parse(req.body);
+    res.json(simulatePaymentAccess(state, input));
+  } catch (error) {
+    res.status(error.statusCode || (error.name === 'ZodError' ? 400 : 400)).json({
+      error: error.name === 'ZodError' ? 'Datos inválidos.' : error.message,
+    });
+  }
+});
+
 const router = Router();
 const state = createDemoNetworkState();
 router.use(allowRoles('OWNER', 'ADMIN'));
