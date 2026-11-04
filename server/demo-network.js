@@ -158,6 +158,9 @@ export function simulatePaymentAccess(state, input, now = new Date()) {
   return { simulated: true, hardwareChanged: false, ...result };
 }
 
+
+
+const router = Router();
 router.post('/mikrotik/payment-access', (req, res) => {
   try {
     const input = z.object({
@@ -174,7 +177,6 @@ router.post('/mikrotik/payment-access', (req, res) => {
   }
 });
 
-const router = Router();
 const state = createDemoNetworkState();
 router.use(allowRoles('OWNER', 'ADMIN'));
 router.get('/status', (_req, res) => res.json({ mode: 'DEMO_ONLY', hardwareConnected: false, persistence: 'MEMORY_ONLY', ...state }));
