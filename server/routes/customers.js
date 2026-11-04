@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import bcrypt from 'bcryptjs';
 import { prisma } from '../db.js';
 import { allowRoles } from '../middleware/auth.js';
 
-export function createCustomersRouter({ db = prisma } = {}) {
+export function createCustomersRouter({ db = prisma, hashPassword = value => bcrypt.hash(value, 12) } = {}) {
   const router = Router();
   const canCreate = allowRoles('OWNER', 'ADMIN', 'BILLING', 'SUPPORT');
   const canEdit = allowRoles('OWNER', 'ADMIN', 'BILLING', 'SUPPORT');
@@ -76,6 +77,33 @@ export function createCustomersRouter({ db = prisma } = {}) {
         data: { tenantId: req.user.tenantId, userId: req.user.id, action: 'UPDATE', entity: 'Customer', entityId: customer.id, metadata: { fields: Object.keys(input) } },
       });
       res.json({ customer });
+    } catch (error) { next(error); }
+  });
+
+
+  router.post('/:id/portal-account', allowRoles('OWNER', 'ADMIN'), async (req, res, next) => {
+    try {
+      const input = z.object({
+        email: z.string().trim().email().max(180).transform(value => value.toLowerCase()).optional(),
+        password: z.string().min(12).max(200),
+      }).strict().parse(req.body);
+      const customer = await db.customer.findFirst({
+        where: { id: req.params.id, tenantId: req.user.tenantId },
+        select: { id: true, tenantId: true, name: true, email: true, portalUser: { select: { id: true } } },
+      });
+      if (!customer) return res.status(404).json({ error: 'Cliente no encontrado.' });
+      if (customer.portalUser) return res.status(409).json({ error: 'Este cliente ya tiene una cuenta de acceso.' });
+      const email = input.email || customer.email?.trim().toLowerCase();
+      if (!email) return res.status(400).json({ error: 'Registra un correo para el cliente o indica uno para el acceso.' });
+      const passwordHash = await hashPassword(input.password);
+      const user = await db.user.create({
+        data: { tenantId: req.user.tenantId, customerId: customer.id, name: customer.name, email, passwordHash, role: 'CUSTOMER' },
+        select: { id: true, name: true, email: true, role: true, active: true },
+      });
+      await db.auditLog.create({
+        data: { tenantId: req.user.tenantId, userId: req.user.id, action: 'CREATE_CUSTOMER_PORTAL_ACCOUNT', entity: 'User', entityId: user.id, metadata: { customerId: customer.id } },
+      });
+      res.status(201).json({ user });
     } catch (error) { next(error); }
   });
 
