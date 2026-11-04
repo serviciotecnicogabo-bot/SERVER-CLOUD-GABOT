@@ -23,7 +23,7 @@ export default function VirtualFtthLab(){
   const selected=services.find(x=>x.id===selectedId);
   const serviceSuspended=selected?.status==='SUSPENDED';
   const serviceActive=selected?.status==='ACTIVE';
-  const online = s.olt && s.pon && s.onu && s.mikrotik && s.customer && (selected ? serviceActive : !s.suspended);
+  const online = Boolean(selected && serviceActive && s.olt && s.pon && s.onu && s.mikrotik && s.customer);
   const add=(msg)=>setEvents(v=>[new Date().toLocaleTimeString('es-PE')+' · '+msg,...v].slice(0,8));
   const change=(key,value,label)=>{setS(v=>({...v,[key]:value,...(key==='suspended'&&value?{paid:false}:{})}));add(label);};
   const reset=()=>{setS(initial);setEvents(['Topología virtual restablecida. El estado guardado del servicio no se modifica.']);};
