@@ -12,6 +12,8 @@ export default function IntegrationsPage({ token, user }) {
   const [services, setServices] = useState([]);
   const [selectedService, setSelectedService] = useState('');
   const [preflight, setPreflight] = useState(null);
+  const [onuIp, setOnuIp] = useState(null);
+  const [onuIpDraft, setOnuIpDraft] = useState('');
   async function api(path, options={}) {
     const r=await fetch('/api/integrations'+path,{...options,headers:{Authorization:'Bearer '+token,...(options.body?{'Content-Type':'application/json'}:{}),...(options.headers||{})}});
     const d=await r.json().catch(()=>({}));
@@ -41,6 +43,22 @@ export default function IntegrationsPage({ token, user }) {
       setPreflight(d);
     }catch(e){setError(e.message);}finally{setBusy('');}
   }
+  async function loadOnuIp(){
+    if(!selectedService)return;
+    try{const r=await fetch('/api/demo-onu-ip/'+encodeURIComponent(selectedService),{headers:{Authorization:'Bearer '+token}});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'No se pudo consultar la IP simulada.');setOnuIp(d.assignment);setOnuIpDraft(d.assignment?.ip||'');}
+    catch(e){setError(e.message);}
+  }
+  async function assignOnuIp(){
+    if(!selectedService)return;setBusy('onu-ip');setError('');
+    try{const r=await fetch('/api/demo-onu-ip/'+encodeURIComponent(selectedService)+'/assign',{method:'POST',headers:{Authorization:'Bearer '+token}});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'No se pudo generar la IP.');setOnuIp(d.assignment);setOnuIpDraft(d.assignment.ip);}
+    catch(e){setError(e.message);}finally{setBusy('');}
+  }
+  async function saveOnuIp(){
+    if(!selectedService)return;setBusy('onu-ip');setError('');
+    try{const r=await fetch('/api/demo-onu-ip/'+encodeURIComponent(selectedService),{method:'PATCH',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body:JSON.stringify({ip:onuIpDraft})});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'No se pudo guardar la IP.');setOnuIp(d.assignment);setOnuIpDraft(d.assignment.ip);}
+    catch(e){setError(e.message);}finally{setBusy('');}
+  }
+  useEffect(()=>{setOnuIp(null);setOnuIpDraft('');if(selectedService)loadOnuIp();},[selectedService]);
   async function save(e){
     e.preventDefault();setBusy('save');setError('');setMessage('');
     try{const d=await api('/config',{method:'PUT',body:JSON.stringify(form)});setStatus(d);setForm(v=>({...v,mikrotikPassword:'',smartoltApiToken:''}));setMessage('Configuración guardada. Las claves quedan cifradas.');}
@@ -78,6 +96,19 @@ export default function IntegrationsPage({ token, user }) {
         </tbody></table>
         <p className="integration-hint">Protección activa: acciones reales deshabilitadas · cambios en equipos: ninguno · solicitudes externas: 0. Incluso si todos los requisitos están completos, esta pantalla solo prepara una revisión manual.</p>
       </div>}
+    </section>
+    <section className="panel integration-card">
+      <div className="integration-heading"><Router size={22}/><div><h2>IP remota de ONU · Simulación</h2><p>Genera o edita una dirección de prueba para el servicio seleccionado.</p></div><span>Solo demo</span></div>
+      {!selectedService&&<p className="integration-hint">Selecciona primero un servicio en la sección de prevalidación.</p>}
+      {selectedService&&<div className="integration-fields">
+        <label>IP simulada<input value={onuIpDraft} onChange={e=>setOnuIpDraft(e.target.value)} placeholder="Generar IP de prueba"/></label>
+        <div className="integration-actions">
+          <button type="button" className="outline-button" onClick={assignOnuIp} disabled={!!busy}>{busy==='onu-ip'?'Procesando...':'Generar IP automática'}</button>
+          <button type="button" className="outline-button" onClick={saveOnuIp} disabled={!onuIpDraft||!!busy}>Guardar IP manual</button>
+        </div>
+      </div>}
+      {onuIp&&<p className="integration-success">IP {onuIp.ip} · {onuIp.source==='AUTO_SIMULATED'?'Asignación automática simulada':'Asignación manual simulada'}.</p>}
+      <p className="integration-hint">Estas direcciones están reservadas para documentación y pruebas. No permiten acceder a una ONU real. Los datos se guardan solo en memoria y se pierden al reiniciar la API. No se envían cambios a MikroTik, OLT ni SmartOLT.</p>
     </section>
     <form onSubmit={save}>
       <section className="panel integration-card">
