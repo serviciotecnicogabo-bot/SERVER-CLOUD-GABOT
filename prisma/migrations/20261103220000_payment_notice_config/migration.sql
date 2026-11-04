@@ -18,3 +18,8 @@ CREATE TABLE "PaymentNoticeConfig" (
 CREATE UNIQUE INDEX "PaymentNoticeConfig_tenantId_key" ON "PaymentNoticeConfig"("tenantId");
 ALTER TABLE "PaymentNoticeConfig" ADD CONSTRAINT "PaymentNoticeConfig_tenantId_fkey"
   FOREIGN KEY ("tenantId") REFERENCES "Tenant"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+ALTER TABLE "User" ADD COLUMN "customerId" TEXT;
+CREATE UNIQUE INDEX "User_customerId_key" ON "User"("customerId");
+ALTER TABLE "User" ADD CONSTRAINT "User_customerId_fkey"
+  FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE SET NULL ON UPDATE CASCADE;
