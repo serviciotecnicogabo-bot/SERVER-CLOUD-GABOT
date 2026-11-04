@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createDemoNetworkState, authorizeDemoOnu, createDemoPppoe, updateDemoPppoeStatus, deleteDemoPppoe, provisionDemoSubscription, resetDemoNetwork } from './demo-network.js';
+import { createDemoNetworkState, authorizeDemoOnu, createDemoPppoe, updateDemoPppoeStatus, deleteDemoPppoe, provisionDemoSubscription, resetDemoNetwork, simulatePaymentAccess } from './demo-network.js';
 
 test('starts with fictional OLT and pending ONUs only', () => {
   const state = createDemoNetworkState();
@@ -94,4 +94,58 @@ test('rejects saved subscriptions without PPPoE identity or with a mismatched pl
   assert.throws(() => provisionDemoSubscription(state, {
     id: 's2', pppoeUsername: '23huallaga789-100', plan: { speedDown: 450 },
   }, 'ONU-DEMO-001'), /no coincide con la velocidad/);
+});
+
+
+test('virtual MikroTik redirects suspended subscribers to non-dismissible payment portal', () => {
+  const state = createDemoNetworkState();
+  authorizeDemoOnu(state, 'ONU-DEMO-001');
+  createDemoPppoe(state, { onuId: 'ONU-DEMO-001', username: '23huallaga789-150' });
+  updateDemoPppoeStatus(state, '23huallaga789-150', 'suspend');
+  const result = simulatePaymentAccess(state, { username: '23huallaga789-150', balance: 95 });
+  assert.equal(result.decision, 'REDIRECT_TO_PAYMENT');
+  assert.equal(result.path, '/portal/regularizar');
+  assert.equal(result.dismissible, false);
+  assert.equal(result.hardwareChanged, false);
+});
+
+test('virtual MikroTik shows a dismissible reminder for an invoice due within configured days', () => {
+  const state = createDemoNetworkState();
+  authorizeDemoOnu(state, 'ONU-DEMO-001');
+  createDemoPppoe(state, { onuId: 'ONU-DEMO-001', username: '23huallaga789-150' });
+  const now = new Date('2026-11-03T12:00:00.000Z');
+  const result = simulatePaymentAccess(state, {
+    username: '23huallaga789-150', balance: 95, dueDate: '2026-11-05T12:00:00.000Z', reminderDays: 3,
+  }, now);
+  assert.equal(result.decision, 'SHOW_DISMISSIBLE_REMINDER');
+  assert.equal(result.path, '/portal/aviso-pago');
+  assert.equal(result.dismissible, true);
+});
+
+test('virtual MikroTik allows paid or not-yet-due subscribers without redirect', () => {
+  const state = createDemoNetworkState();
+  authorizeDemoOnu(state, 'ONU-DEMO-001');
+  createDemoPppoe(state, { onuId: 'ONU-DEMO-001', username: '23huallaga789-150' });
+  const now = new Date('2026-11-03T12:00:00.000Z');
+  const paid = simulatePaymentAccess(state, { username: '23huallaga789-150', balance: 0 }, now);
+  const notDue = simulatePaymentAccess(state, {
+    username: '23huallaga789-150', balance: 95, dueDate: '2026-11-20T12:00:00.000Z', reminderDays: 3,
+  }, now);
+  assert.equal(paid.decision, 'ALLOW');
+  assert.equal(notDue.decision, 'ALLOW');
+});
+
+test('virtual MikroTik sends overdue invoices to the payment portal and validates input', () => {
+  const state = createDemoNetworkState();
+  authorizeDemoOnu(state, 'ONU-DEMO-001');
+  createDemoPppoe(state, { onuId: 'ONU-DEMO-001', username: '23huallaga789-150' });
+  const now = new Date('2026-11-03T12:00:00.000Z');
+  const overdue = simulatePaymentAccess(state, {
+    username: '23huallaga789-150', balance: 95, dueDate: '2026-11-02T12:00:00.000Z',
+  }, now);
+  assert.equal(overdue.decision, 'REDIRECT_TO_PAYMENT');
+  assert.equal(overdue.reason, 'INVOICE_OVERDUE');
+  assert.throws(() => simulatePaymentAccess(state, {
+    username: '23huallaga789-150', balance: -1,
+  }, now), /saldo pendiente/);
 });
