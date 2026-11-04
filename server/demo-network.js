@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { allowRoles } from './middleware/auth.js';
 import { prisma } from './db.js';
@@ -43,6 +44,7 @@ export function createDemoPppoe(state, input) {
   if (!plans[planCode]) throw Object.assign(new Error('Código de plan no reconocido.'), { statusCode: 400 });
   const record = {
     id: `PPPOE-DEMO-${String(state.pppoe.length + 1).padStart(3, '0')}`,
+    portalToken: randomUUID(),
     username: input.username,
     planCode,
     ...plans[planCode],
@@ -148,8 +150,8 @@ function escapeHtml(value) {
 // No expone nombre legal, documento, correo, teléfono, dirección ni credenciales.
 export const demoPortalRouter = Router();
 demoPortalRouter.get('/:username', (req, res) => {
-  const username = String(req.params.username || '');
-  const record = state.pppoe.find(item => item.username === username);
+  const portalToken = String(req.params.token || '');
+  const record = state.pppoe.find(item => item.portalToken === portalToken);
   if (!record) return res.status(404).type('html').send('<!doctype html><html lang="es"><meta charset="utf-8"><title>Cuenta no encontrada</title><body><h1>Cuenta de demostración no encontrada</h1></body></html>');
   const suspended = record.routerStatus === 'SUSPENDED' && record.billingStatus === 'OVERDUE';
   const title = suspended ? 'Servicio temporalmente suspendido' : 'Servicio activo';
