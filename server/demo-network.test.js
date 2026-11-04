@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createDemoNetworkState, authorizeDemoOnu, createDemoPppoe, updateDemoPppoeStatus, deleteDemoPppoe, provisionDemoSubscription, resetDemoNetwork } from './demo-network.js';
+import { createDemoNetworkState, authorizeDemoOnu, createDemoPppoe, updateDemoPppoeStatus, deleteDemoPppoe, provisionDemoSubscription, markDemoOverdue, recordDemoPayment, resetDemoNetwork } from './demo-network.js';
 
 test('starts with fictional OLT and pending ONUs only', () => {
   const state = createDemoNetworkState();
@@ -94,4 +94,39 @@ test('rejects saved subscriptions without PPPoE identity or with a mismatched pl
   assert.throws(() => provisionDemoSubscription(state, {
     id: 's2', pppoeUsername: '23huallaga789-100', plan: { speedDown: 450 },
   }, 'ONU-DEMO-001'), /no coincide con la velocidad/);
+});
+
+test('simulates overdue suspension and payment-triggered reconnection', () => {
+  const state = createDemoNetworkState();
+  authorizeDemoOnu(state, 'ONU-DEMO-001');
+  const created = createDemoPppoe(state, { onuId: 'ONU-DEMO-001', username: '23huallaga789-150' });
+  const overdue = markDemoOverdue(state, created.username);
+  assert.equal(overdue.billingStatus, 'OVERDUE');
+  assert.equal(overdue.routerStatus, 'SUSPENDED');
+  assert.ok(overdue.suspendedAt);
+  const paid = recordDemoPayment(state, created.username);
+  assert.equal(paid.billingStatus, 'PAID');
+  assert.equal(paid.routerStatus, 'ACTIVE');
+  assert.ok(paid.paidAt);
+  assert.deepEqual(state.events.slice(0, 2).map(event => event.action), [
+    'PAYMENT_RECEIVED_AND_REACTIVATED_SIMULATED',
+    'OVERDUE_AND_SUSPENDED_SIMULATED',
+  ]);
+});
+
+test('does not accept a payment for an account that is not suspended for overdue billing', () => {
+  const state = createDemoNetworkState();
+  authorizeDemoOnu(state, 'ONU-DEMO-001');
+  const created = createDemoPppoe(state, { onuId: 'ONU-DEMO-001', username: '23huallaga789-150' });
+  assert.throws(() => recordDemoPayment(state, created.username), /no tiene una suspensión por deuda/);
+});
+
+test('does not expose any personal customer fields in the simulated portal account record', () => {
+  const state = createDemoNetworkState();
+  authorizeDemoOnu(state, 'ONU-DEMO-001');
+  const pppoe = createDemoPppoe(state, { onuId: 'ONU-DEMO-001', username: '23huallaga789-150' });
+  const keys = Object.keys(pppoe);
+  assert.ok(keys.includes('username'));
+  assert.ok(keys.includes('planCode'));
+  assert.ok(!keys.some(key => /dni|document|password|email|phone|address/i.test(key)));
 });
